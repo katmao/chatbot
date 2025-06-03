@@ -2,8 +2,8 @@
 /*eslint-disable*/
 
 import Link from '@/components/link/Link';
-import MessageBoxChat from '@/components/MessageBox';
-import VoiceRecorder from './components/VoiceRecorder';
+import MessageBox from '@/components/MessageBox';
+import VoiceRecorder from '@/components/VoiceRecorder';
 import { ChatBody, OpenAIModel } from '@/types/types';
 import {
   Accordion,
@@ -20,10 +20,15 @@ import {
   Text,
   useColorModeValue,
   useToast,
+  IconButton,
+  Container,
 } from '@chakra-ui/react';
-import { useEffect, useState, useRef, MouseEvent } from 'react';
+import { useEffect, useState, useRef, MouseEvent, useCallback } from 'react';
 import { MdAutoAwesome, MdBolt, MdEdit, MdPerson, MdVolumeUp } from 'react-icons/md';
 import Bg from '../public/img/chat/bg-image.png';
+import { MicrophoneIcon } from '@heroicons/react/24/solid';
+import VoiceMode from '@/components/VoiceMode';
+import { ChatMessage, ChatState } from '@/types/chat';
 
 interface Message {
   role: 'user' | 'assistant';
@@ -32,208 +37,135 @@ interface Message {
   audioUrl?: string;
 }
 
-export default function Chat() {
-  const [messages, setMessages] = useState<Message[]>([]);
-  const [inputText, setInputText] = useState('');
-  const [isLoading, setIsLoading] = useState(false);
-  const audioRef = useRef<HTMLAudioElement | null>(null);
+export default function Home() {
+  const [state, setState] = useState<ChatState>({
+    messages: [],
+    isVoiceMode: false,
+    isListening: false,
+    isProcessing: false,
+    isSpeaking: false
+  });
+
   const toast = useToast();
 
-  const handleSubmit = async () => {
-    if (!inputText.trim()) return;
+  const handleVoiceInput = useCallback(async (text: string) => {
+    // Add user message to history
+    setState(prev => ({
+      ...prev,
+      messages: [...prev.messages, {
+        role: 'user',
+        content: text,
+        timestamp: Date.now()
+      }],
+      isProcessing: true
+    }));
 
     try {
-      setIsLoading(true);
-      
-      // Add user message
-      setMessages(prev => [...prev, { role: 'user', content: inputText }]);
-
-      // Send to chat API
       const response = await fetch('/api/chatAPI', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          inputCode: inputText,
-          model: 'gpt-4'
-        }),
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ inputCode: text })
       });
 
-      if (!response.ok) {
-        throw new Error('Failed to get response');
-      }
+      if (!response.ok) throw new Error('Failed to get response');
 
-      const data = response.body;
-      if (!data) {
-        throw new Error('No data received');
-      }
-
-      // Read the streaming response
-      const reader = data.getReader();
-      const decoder = new TextDecoder();
-      let fullResponse = '';
-
-      while (true) {
-        const { value, done } = await reader.read();
-        if (done) break;
-        
-        const chunk = decoder.decode(value);
-        fullResponse += chunk;
-        
-        // Update the assistant's message
-        setMessages(prev => {
-          const newMessages = [...prev];
-          if (newMessages[newMessages.length - 1]?.role === 'assistant') {
-            newMessages[newMessages.length - 1].content = fullResponse;
-          } else {
-            newMessages.push({ role: 'assistant', content: fullResponse });
-          }
-          return newMessages;
-        });
-      }
+      const data = await response.text();
+      
+      // Add assistant message to history
+      setState(prev => ({
+        ...prev,
+        messages: [...prev.messages, {
+          role: 'assistant',
+          content: data,
+          timestamp: Date.now()
+        }],
+        isProcessing: false,
+        isSpeaking: true
+      }));
 
       // Convert response to speech
       const speechResponse = await fetch('/api/text-to-speech', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ text: fullResponse }),
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text: data })
       });
 
-      if (!speechResponse.ok) {
-        throw new Error('Failed to generate speech');
-      }
+      if (!speechResponse.ok) throw new Error('Failed to convert to speech');
 
       const audioBlob = await speechResponse.blob();
-      if (audioRef.current) {
-        audioRef.current.src = URL.createObjectURL(audioBlob);
-        audioRef.current.play();
-      }
-
+      const audio = new Audio(URL.createObjectURL(audioBlob));
+      
+      audio.onended = () => {
+        setState(prev => ({ ...prev, isSpeaking: false }));
+      };
+      
+      audio.play();
     } catch (error) {
+      console.error('Error:', error);
       toast({
         title: 'Error',
-        description: 'Failed to process request',
+        description: 'Something went wrong. Please try again.',
         status: 'error',
         duration: 3000,
         isClosable: true,
       });
-    } finally {
-      setIsLoading(false);
-      setInputText('');
+      setState(prev => ({ ...prev, isProcessing: false }));
     }
+  }, [toast]);
+
+  const toggleVoiceMode = () => {
+    setState(prev => ({ ...prev, isVoiceMode: !prev.isVoiceMode }));
   };
 
-  const handleVoiceInput = async () => {
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const mediaRecorder = new MediaRecorder(stream);
-      const audioChunks: BlobPart[] = [];
-
-      mediaRecorder.ondataavailable = (event) => {
-        audioChunks.push(event.data);
-      };
-
-      mediaRecorder.onstop = async () => {
-        const audioBlob = new Blob(audioChunks, { type: 'audio/wav' });
-        
-        // Convert speech to text
-        const formData = new FormData();
-        formData.append('audio', audioBlob);
-
-        const response = await fetch('/api/speech-to-text', {
-          method: 'POST',
-          body: formData,
-        });
-
-        if (!response.ok) {
-          throw new Error('Failed to convert speech to text');
-        }
-
-        const { text } = await response.json();
-        setInputText(text);
-        handleSubmit();
-      };
-
-      // Start recording
-      mediaRecorder.start();
-      toast({
-        title: 'Recording started',
-        description: 'Speak your message',
-        status: 'info',
-        duration: 3000,
-        isClosable: true,
-      });
-
-      // Stop recording after 5 seconds
-      setTimeout(() => {
-        mediaRecorder.stop();
-        stream.getTracks().forEach(track => track.stop());
-      }, 5000);
-
-    } catch (error) {
-      toast({
-        title: 'Error',
-        description: 'Failed to access microphone',
-        status: 'error',
-        duration: 3000,
-        isClosable: true,
-      });
-    }
+  const handleExitVoiceMode = () => {
+    setState(prev => ({ 
+      ...prev, 
+      isVoiceMode: false,
+      isListening: false,
+      isProcessing: false,
+      isSpeaking: false
+    }));
   };
 
   return (
-    <Flex direction="column" h="100vh" p={4} maxW="800px" mx="auto">
-      <audio ref={audioRef} style={{ display: 'none' }} />
-      
-      {/* Messages */}
-      <Flex
-        direction="column"
-        flex={1}
-        overflowY="auto"
-        mb={4}
-        gap={4}
-      >
-        {messages.map((message, index) => (
-          <Box
-            key={index}
-            alignSelf={message.role === 'user' ? 'flex-end' : 'flex-start'}
-            bg={message.role === 'user' ? 'blue.500' : 'gray.200'}
-            color={message.role === 'user' ? 'white' : 'black'}
-            p={3}
-            borderRadius="lg"
-            maxW="80%"
-          >
-            <Text>{message.content}</Text>
-          </Box>
-        ))}
-      </Flex>
+    <Container maxW="container.xl" py={8}>
+      <Flex direction="column" gap={4}>
+        {state.isVoiceMode ? (
+          <VoiceMode
+            isListening={state.isListening}
+            isProcessing={state.isProcessing}
+            isSpeaking={state.isSpeaking}
+            onExitVoiceMode={handleExitVoiceMode}
+          />
+        ) : (
+          <>
+            {state.messages.map((message) => (
+              <MessageBox
+                key={message.timestamp}
+                output={message.content}
+                isUser={message.role === 'user'}
+              />
+            ))}
+          </>
+        )}
+        
+        <Box position="fixed" bottom={8} right={8}>
+          <IconButton
+            aria-label="Toggle voice mode"
+            icon={<MicrophoneIcon width={24} />}
+            size="lg"
+            colorScheme={state.isVoiceMode ? 'blue' : 'gray'}
+            onClick={toggleVoiceMode}
+          />
+        </Box>
 
-      {/* Input */}
-      <Flex gap={2}>
-        <Input
-          value={inputText}
-          onChange={(e) => setInputText(e.target.value)}
-          placeholder="Type your message..."
-          onKeyPress={(e) => e.key === 'Enter' && handleSubmit()}
+        <VoiceRecorder
+          onTranscriptionComplete={handleVoiceInput}
+          onListeningChange={(isListening: boolean) => 
+            setState(prev => ({ ...prev, isListening }))
+          }
         />
-        <Button
-          onClick={handleVoiceInput}
-          colorScheme="blue"
-          isLoading={isLoading}
-        >
-          Voice
-        </Button>
-        <Button
-          onClick={handleSubmit}
-          colorScheme="green"
-          isLoading={isLoading}
-        >
-          Send
-        </Button>
       </Flex>
-    </Flex>
+    </Container>
   );
 }
