@@ -1,12 +1,16 @@
-import ReactMarkdown from 'react-markdown';
-import { FC } from 'react';
+import { FC, useMemo } from 'react';
+import { marked } from 'marked';
 
 interface Props {
   text: string;
 }
 
 const MarkdownBlock: FC<Props> = ({ text }) => {
-  return <ReactMarkdown>{text}</ReactMarkdown>;
+  const content = useMemo(() => {
+    return { __html: marked.parse(text, { async: false }) as string };
+  }, [text]);
+
+  return <div className="markdown-content" dangerouslySetInnerHTML={content} />;
 };
 
 export default MarkdownBlock;
