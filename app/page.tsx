@@ -84,8 +84,8 @@ export default function Home() {
   }, [toast]);
 
   return (
-    <Container maxW="container.xl" py={8}>
-      <Flex direction="column" gap={4}>
+    <Box bg="#fff" minH="100vh" position="relative">
+      <Box pb="90px" maxW="600px" mx="auto" pt={8}>
         {/* Speaking indicator */}
         {isSpeaking && (
           <Flex align="center" gap={2} mb={2}>
@@ -96,7 +96,7 @@ export default function Home() {
               bg="blue.400"
               animation={`${keyframes`0%{opacity:1}50%{opacity:0.3}100%{opacity:1}`} 1s infinite`}
             />
-            <Text color="blue.400" fontWeight="500">Agent is speaking...</Text>
+            <Text color="#222" fontWeight="500">Agent is speaking...</Text>
           </Flex>
         )}
         {messages.map((message) => (
@@ -104,44 +104,58 @@ export default function Home() {
             key={message.timestamp}
             output={message.content}
             isUser={true}
+            bg="#e5e7eb"
           />
         ))}
-        <form
-          onSubmit={e => {
-            e.preventDefault();
-            if (input.trim()) {
-              handleUserInput(input.trim());
-              setInput('');
-            }
-          }}
-          style={{ width: '100%' }}
-        >
-          <Flex mt={4} gap={2} align="center">
-            <Input
-              placeholder="Type your message..."
-              value={input}
-              onChange={e => setInput(e.target.value)}
-              onKeyDown={e => {
-                if (e.key === 'Enter' && !e.shiftKey) {
-                  e.preventDefault();
-                  if (input.trim()) {
-                    handleUserInput(input.trim());
-                    setInput('');
-                  }
+      </Box>
+      <Box as="form" onSubmit={(e: React.FormEvent) => {
+        e.preventDefault();
+        if (input.trim()) {
+          handleUserInput(input.trim());
+          setInput('');
+        }
+      }}
+        position="fixed"
+        bottom={0}
+        left={0}
+        w="100%"
+        bg="#fff"
+        py={4}
+        px={2}
+        zIndex={10}
+      >
+        <Flex maxW="600px" mx="auto" gap={2} align="center">
+          <Input
+            placeholder="Type your message..."
+            value={input}
+            onChange={e => setInput(e.target.value)}
+            onKeyDown={e => {
+              if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                if (input.trim()) {
+                  handleUserInput(input.trim());
+                  setInput('');
                 }
-              }}
-              autoFocus
-            />
-            <Button
-              type="submit"
-              colorScheme="blue"
-              isDisabled={!input.trim()}
-            >
-              Send
-            </Button>
-          </Flex>
-        </form>
-      </Flex>
-    </Container>
+              }
+            }}
+            bg="#e5e7eb"
+            border="1px solid #d1d5db"
+            borderRadius="md"
+            _focus={{ boxShadow: 'none', border: '1.5px solid #a3a3a3', bg: '#e5e7eb' }}
+            autoFocus
+          />
+          <Button
+            type="submit"
+            bg="#d1d5db"
+            color="#222"
+            _hover={{ bg: '#e5e7eb' }}
+            borderRadius="md"
+            isDisabled={!input.trim()}
+          >
+            Send
+          </Button>
+        </Flex>
+      </Box>
+    </Box>
   );
 }

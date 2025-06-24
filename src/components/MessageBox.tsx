@@ -6,14 +6,12 @@ import { useMemo } from 'react'
 interface Props {
   output: string;
   isUser?: boolean;
+  bg?: string;
 }
 
-export default function MessageBox({ output, isUser = false }: Props) {
-  // ChatGPT-like styles
-  const userBg = useColorModeValue('#f7f7f8', '#26272b');
-  const userText = useColorModeValue('#222', '#f7f7f8');
-  const assistantBg = useColorModeValue('white', 'navy.700');
-  const assistantText = useColorModeValue('navy.700', 'white');
+export default function MessageBox({ output, isUser = false, bg }: Props) {
+  const textColor = useColorModeValue('gray.800', 'white')
+  const bgColor = bg ?? (isUser ? '#f4f6f8' : 'white')
 
   const content = useMemo(() => {
     return { __html: marked.parse(output || '', { async: false }) as string }
@@ -24,18 +22,18 @@ export default function MessageBox({ output, isUser = false }: Props) {
       display={output ? 'flex' : 'none'}
       px="20px"
       py="16px"
-      color={isUser ? userText : assistantText}
-      bg={isUser ? userBg : assistantBg}
-      fontSize={{ base: 'md', md: 'md' }}
-      lineHeight={{ base: '24px', md: '26px' }}
-      fontWeight="400"
-      borderRadius="lg"
-      boxShadow={isUser ? 'sm' : 'xs'}
+      color={textColor}
+      bg={bgColor}
+      fontSize="1rem"
+      lineHeight="1.6"
+      fontWeight={400}
       alignSelf={isUser ? 'flex-end' : 'flex-start'}
-      maxW="700px"
-      my={2}
+      maxW="100%"
+      boxShadow="sm"
+      borderRadius="lg"
+      mb="12px"
     >
-      <div className="markdown-content" dangerouslySetInnerHTML={content} />
+      <div className="markdown-content" style={{ width: '100%' }} dangerouslySetInnerHTML={content} />
     </Card>
   )
 }
