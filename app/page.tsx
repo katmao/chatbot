@@ -3,7 +3,6 @@
 
 import Link from '@/components/link/Link';
 import MessageBox from '@/components/MessageBox';
-import VoiceRecorder from '@/components/VoiceRecorder';
 import { ChatBody, OpenAIModel } from '@/types/types';
 import {
   Accordion,
@@ -23,12 +22,11 @@ import {
   IconButton,
   Container,
 } from '@chakra-ui/react';
-import { useEffect, useState, useRef, MouseEvent, useCallback } from 'react';
+import { useEffect, useState, useRef, MouseEvent, useCallback, FormEvent } from 'react';
 import { MdAutoAwesome, MdBolt, MdEdit, MdPerson, MdVolumeUp } from 'react-icons/md';
 import Bg from '../public/img/chat/bg-image.png';
-import { MicrophoneIcon } from '@heroicons/react/24/solid';
-import VoiceMode from '@/components/VoiceMode';
 import { ChatMessage, ChatState } from '@/types/chat';
+import { keyframes } from '@emotion/react';
 
 interface Message {
   role: 'user' | 'assistant';
@@ -38,27 +36,17 @@ interface Message {
 }
 
 export default function Home() {
-  const [state, setState] = useState<ChatState>({
-    messages: [],
-    isVoiceMode: false,
-    isListening: false,
-    isProcessing: false,
-    isSpeaking: false
-  });
-
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [isSpeaking, setIsSpeaking] = useState(false);
   const toast = useToast();
+  const [input, setInput] = useState('');
 
-  const handleVoiceInput = useCallback(async (text: string) => {
-    // Add user message to history
-    setState(prev => ({
-      ...prev,
-      messages: [...prev.messages, {
-        role: 'user',
-        content: text,
-        timestamp: Date.now()
-      }],
-      isProcessing: true
-    }));
+  const handleUserInput = useCallback(async (text: string) => {
+    setMessages(prev => ([...prev, {
+      role: 'user',
+      content: text,
+      timestamp: Date.now()
+    }]));
 
     try {
       const response = await fetch('/api/chatAPI', {
@@ -70,35 +58,17 @@ export default function Home() {
       if (!response.ok) throw new Error('Failed to get response');
 
       const data = await response.text();
-      
-      // Add assistant message to history
-      setState(prev => ({
-        ...prev,
-        messages: [...prev.messages, {
-          role: 'assistant',
-          content: data,
-          timestamp: Date.now()
-        }],
-        isProcessing: false,
-        isSpeaking: true
-      }));
-
-      // Convert response to speech
+      // Play assistant response as audio only
       const speechResponse = await fetch('/api/text-to-speech', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ text: data })
       });
-
       if (!speechResponse.ok) throw new Error('Failed to convert to speech');
-
       const audioBlob = await speechResponse.blob();
       const audio = new Audio(URL.createObjectURL(audioBlob));
-      
-      audio.onended = () => {
-        setState(prev => ({ ...prev, isSpeaking: false }));
-      };
-      
+      setIsSpeaking(true);
+      audio.onended = () => setIsSpeaking(false);
       audio.play();
     } catch (error) {
       console.error('Error:', error);
@@ -109,62 +79,68 @@ export default function Home() {
         duration: 3000,
         isClosable: true,
       });
-      setState(prev => ({ ...prev, isProcessing: false }));
+      setIsSpeaking(false);
     }
   }, [toast]);
-
-  const toggleVoiceMode = () => {
-    setState(prev => ({ ...prev, isVoiceMode: !prev.isVoiceMode }));
-  };
-
-  const handleExitVoiceMode = () => {
-    setState(prev => ({ 
-      ...prev, 
-      isVoiceMode: false,
-      isListening: false,
-      isProcessing: false,
-      isSpeaking: false
-    }));
-  };
 
   return (
     <Container maxW="container.xl" py={8}>
       <Flex direction="column" gap={4}>
-        {state.isVoiceMode ? (
-          <VoiceMode
-            isListening={state.isListening}
-            isProcessing={state.isProcessing}
-            isSpeaking={state.isSpeaking}
-            onExitVoiceMode={handleExitVoiceMode}
-          />
-        ) : (
-          <>
-            {state.messages.map((message) => (
-              <MessageBox
-                key={message.timestamp}
-                output={message.content}
-                isUser={message.role === 'user'}
-              />
-            ))}
-          </>
+        {/* Speaking indicator */}
+        {isSpeaking && (
+          <Flex align="center" gap={2} mb={2}>
+            <Box
+              as="span"
+              boxSize="16px"
+              borderRadius="full"
+              bg="blue.400"
+              animation={`${keyframes`0%{opacity:1}50%{opacity:0.3}100%{opacity:1}`} 1s infinite`}
+            />
+            <Text color="blue.400" fontWeight="500">Assistant is speaking...</Text>
+          </Flex>
         )}
-        
-        <Box position="fixed" bottom={8} right={8}>
-          <IconButton
-            aria-label="Toggle voice mode"
-            icon={<MicrophoneIcon width={24} />}
-            size="lg"
-            colorScheme={state.isVoiceMode ? 'blue' : 'gray'}
-            onClick={toggleVoiceMode}
+        {messages.map((message) => (
+          <MessageBox
+            key={message.timestamp}
+            output={message.content}
+            isUser={true}
           />
-        </Box>
-
-        <VoiceRecorder
-          onTranscriptionComplete={handleVoiceInput}
-          onListeningChange={(isListening: boolean) => 
-            setState(prev => ({ ...prev, isListening }))
-          }
-        />
+        ))}
+        <form
+          onSubmit={e => {
+            e.preventDefault();
+            if (input.trim()) {
+              handleUserInput(input.trim());
+              setInput('');
+            }
+          }}
+          style={{ width: '100%' }}
+        >
+          <Flex mt={4} gap={2} align="center">
+            <Input
+              placeholder="Type your message..."
+              value={input}
+              onChange={e => setInput(e.target.value)}
+              onKeyDown={e => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                  e.preventDefault();
+                  if (input.trim()) {
+                    handleUserInput(input.trim());
+                    setInput('');
+                  }
+                }
+              }}
+              autoFocus
+            />
+            <Button
+              type="submit"
+              colorScheme="blue"
+              isDisabled={!input.trim()}
+            >
+              Send
+            </Button>
+          </Flex>
+        </form>
       </Flex>
     </Container>
   );
