@@ -9,11 +9,11 @@ interface Props {
 }
 
 export default function MessageBox({ output, isUser = false }: Props) {
-  const textColor = useColorModeValue('navy.700', 'white')
-  const bgColor = useColorModeValue(
-    isUser ? 'blue.500' : 'white',
-    isUser ? 'blue.400' : 'navy.700'
-  )
+  // ChatGPT-like styles
+  const userBg = useColorModeValue('#f7f7f8', '#26272b');
+  const userText = useColorModeValue('#222', '#f7f7f8');
+  const assistantBg = useColorModeValue('white', 'navy.700');
+  const assistantText = useColorModeValue('navy.700', 'white');
 
   const content = useMemo(() => {
     return { __html: marked.parse(output || '', { async: false }) as string }
@@ -22,15 +22,18 @@ export default function MessageBox({ output, isUser = false }: Props) {
   return (
     <Card
       display={output ? 'flex' : 'none'}
-      px="22px !important"
-      pl="22px !important"
-      color={isUser ? 'white' : textColor}
-      bg={bgColor}
-      fontSize={{ base: 'sm', md: 'md' }}
+      px="20px"
+      py="16px"
+      color={isUser ? userText : assistantText}
+      bg={isUser ? userBg : assistantBg}
+      fontSize={{ base: 'md', md: 'md' }}
       lineHeight={{ base: '24px', md: '26px' }}
-      fontWeight="500"
+      fontWeight="400"
+      borderRadius="lg"
+      boxShadow={isUser ? 'sm' : 'xs'}
       alignSelf={isUser ? 'flex-end' : 'flex-start'}
-      maxW="80%"
+      maxW="700px"
+      my={2}
     >
       <div className="markdown-content" dangerouslySetInnerHTML={content} />
     </Card>
