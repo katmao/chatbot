@@ -96,7 +96,7 @@ export default function Home() {
               bg="blue.400"
               animation={`${keyframes`0%{opacity:1}50%{opacity:0.3}100%{opacity:1}`} 1s infinite`}
             />
-            <Text color="blue.400" fontWeight="500">Assistant is speaking...</Text>
+            <Text color="blue.400" fontWeight="500">Agent is speaking...</Text>
           </Flex>
         )}
         {messages.map((message) => (
