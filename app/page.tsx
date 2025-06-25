@@ -217,7 +217,7 @@ export default function Chat() {
           <Box
             key={idx}
             display="flex"
-            justifyContent="flex-start"
+            justifyContent={msg.role === 'user' ? 'flex-end' : 'flex-start'}
             mb={2}
           >
             <Box
