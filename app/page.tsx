@@ -39,49 +39,92 @@ export default function Home() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [isSpeaking, setIsSpeaking] = useState(false);
   const toast = useToast();
+  const lastMilestoneRef = useRef(0);
   const [input, setInput] = useState('');
 
   const handleUserInput = useCallback(async (text: string) => {
-    setMessages(prev => ([...prev, {
-      role: 'user',
+    // Add the new user message to the local state
+    const newUserMessage = {
+      role: 'user' as 'user',
       content: text,
       timestamp: Date.now()
-    }]));
+    };
+    
+    setMessages(prev => {
+      const updatedMessages = [...prev, newUserMessage];
+      
+      // Send the complete message history (including previous assistant messages) to the backend
+      (async () => {
+        try {
+          const response = await fetch('/api/chatAPI', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ messages: updatedMessages })
+          });
 
-    try {
-      const response = await fetch('/api/chatAPI', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ inputCode: text })
-      });
+          if (!response.ok) throw new Error('Failed to get response');
 
-      if (!response.ok) throw new Error('Failed to get response');
+          const data = await response.text();
+          // Add assistant reply to message history
+          setMessages(prevMsgs => ([
+            ...prevMsgs,
+            {
+              role: 'assistant' as 'assistant',
+              content: data,
+              timestamp: Date.now()
+            }
+          ]));
+          // Play assistant response as audio only
+          const speechResponse = await fetch('/api/text-to-speech', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ text: data })
+          });
+          if (!speechResponse.ok) throw new Error('Failed to convert to speech');
+          const audioBlob = await speechResponse.blob();
+          const audio = new Audio(URL.createObjectURL(audioBlob));
+          setIsSpeaking(true);
+          audio.onended = () => setIsSpeaking(false);
+          audio.play();
+        } catch (error) {
+          console.error('Error:', error);
+          toast({
+            title: 'Error',
+            description: 'Something went wrong. Please try again.',
+            status: 'error',
+            duration: 3000,
+            isClosable: true,
+          });
+          setIsSpeaking(false);
+        }
+      })();
 
-      const data = await response.text();
-      // Play assistant response as audio only
-      const speechResponse = await fetch('/api/text-to-speech', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text: data })
-      });
-      if (!speechResponse.ok) throw new Error('Failed to convert to speech');
-      const audioBlob = await speechResponse.blob();
-      const audio = new Audio(URL.createObjectURL(audioBlob));
-      setIsSpeaking(true);
-      audio.onended = () => setIsSpeaking(false);
-      audio.play();
-    } catch (error) {
-      console.error('Error:', error);
-      toast({
-        title: 'Error',
-        description: 'Something went wrong. Please try again.',
-        status: 'error',
-        duration: 3000,
-        isClosable: true,
-      });
-      setIsSpeaking(false);
-    }
+      return updatedMessages;
+    });
   }, [toast]);
+
+  useEffect(() => {
+    const userCount = messages.filter(m => m.role === 'user').length;
+    const assistantCount = messages.filter(m => m.role === 'assistant').length;
+    const milestone = Math.floor(Math.min(userCount, assistantCount) / 10);
+    if (
+      userCount > 0 &&
+      assistantCount > 0 &&
+      userCount % 10 === 0 &&
+      assistantCount % 10 === 0 &&
+      messages.length % 20 === 0 &&
+      milestone > lastMilestoneRef.current
+    ) {
+      toast({
+        title: 'Please move on to the next prompt',
+        status: 'info',
+        duration: 5000,
+        isClosable: true,
+        position: 'top',
+      });
+      lastMilestoneRef.current = milestone;
+    }
+  }, [messages, toast]);
 
   return (
     <Box bg="#fff" minH="100vh" position="relative">
@@ -99,7 +142,7 @@ export default function Home() {
             <Text color="#222" fontWeight="500">Agent is speaking...</Text>
           </Flex>
         )}
-        {messages.map((message) => (
+        {messages.filter(m => m.role === 'user').map((message) => (
           <MessageBox
             key={message.timestamp}
             output={message.content}

@@ -8,34 +8,67 @@ interface ChatGPTMessage {
   content: string;
 }
 
-const createPrompt = (inputCode: string) => {
-  const systemPrompt = endent`Communicate in a natural, age-appropriate tone (early 20s) while maintaining a lightly intimate, conversational style that builds genuine connection. Keep responses concise and authentic.
+// Accept messages as a parameter
+const createPrompt = (messages: ChatGPTMessage[]) => {
+  // Count assistant replies so far
+  const assistantCount = messages.filter(m => m.role === 'assistant').length;
 
-Key constraints:
+  let systemPrompt = endent`
+You are a chatbot with no specific role or identity. In your conversation:
 - Limit responses to 4 sentences maximum
 - Use natural contractions and casual language
 - Keep responses genuine and humanlike
 - Only ask questions when it flows naturally
 - Avoid excessive enthusiasm or formality
 - No emojis or AI self-references
-- Focus on building rapport through warm, thoughtful responses`;
+`;
 
-  const messages: ChatGPTMessage[] = [
-    {
-      role: 'system',
-      content: systemPrompt,
-    },
-    {
-      role: 'user',
-      content: inputCode,
-    },
-  ];
+  if (assistantCount === 0) {
+    systemPrompt += '\n\nCRITICAL INSTRUCTION: For your very first reply, you MUST respond with EXACTLY these words and nothing else: "Hi, how are you?"';
+  } else if (assistantCount === 1) {
+    systemPrompt += '\n\nCRITICAL INSTRUCTION: For your second reply, you MUST respond with EXACTLY these words and nothing else: "Our task is to discuss prompts here. Let\'s start with the first one. Would you like to be famous? In what way?"';
+  }
 
-  return messages;
+  return systemPrompt;
 };
 
-export async function OpenAIStream(inputCode: string) {
-  const messages = createPrompt(inputCode);
+// Accept full message history
+export async function OpenAIStream(messages: ChatGPTMessage[]) {
+  // Count assistant replies so far
+  const assistantCount = messages.filter(m => m.role === 'assistant').length;
+  
+  // Force exact responses for first and second replies
+  if (assistantCount === 0) {
+    // Return exact first reply
+    const encoder = new TextEncoder();
+    const stream = new ReadableStream({
+      start(controller) {
+        const text = "Hi, how are you?";
+        controller.enqueue(encoder.encode(text));
+        controller.close();
+      }
+    });
+    return stream;
+  } else if (assistantCount === 1) {
+    // Return exact second reply
+    const encoder = new TextEncoder();
+    const stream = new ReadableStream({
+      start(controller) {
+        const text = "Our task is to discuss prompts here. Let's start with the first one. Would you like to be famous? In what way?";
+        controller.enqueue(encoder.encode(text));
+        controller.close();
+      }
+    });
+    return stream;
+  }
+
+  // For subsequent replies, use normal OpenAI API
+  const systemPrompt = createPrompt(messages);
+  const systemMessage = { role: 'system', content: systemPrompt };
+  // Remove any previous system messages from history
+  const filteredMessages = messages.filter(m => m.role !== 'system');
+  const fullMessages = [systemMessage, ...filteredMessages];
+
   const encoder = new TextEncoder();
   const decoder = new TextDecoder();
 
@@ -47,7 +80,7 @@ export async function OpenAIStream(inputCode: string) {
     method: 'POST',
     body: JSON.stringify({
       model: 'gpt-3.5-turbo',
-      messages: messages,
+      messages: fullMessages,
       temperature: 0.7,
       stream: true,
     }),
