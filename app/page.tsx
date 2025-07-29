@@ -41,6 +41,16 @@ export default function Home() {
   const toast = useToast();
   const lastMilestoneRef = useRef(0);
   const [input, setInput] = useState('');
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  // Auto-scroll to bottom when messages change
+  const scrollToBottom = () => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  };
+
+  useEffect(() => {
+    scrollToBottom();
+  }, [messages]);
 
   const handleUserInput = useCallback(async (text: string) => {
     // Add the new user message to the local state
@@ -129,9 +139,30 @@ export default function Home() {
   return (
     <Box bg="#fff" minH="100vh" position="relative">
       <Box pb="90px" maxW="600px" mx="auto" pt={8}>
-        {/* Speaking indicator */}
-        {isSpeaking && (
-          <Flex align="center" gap={2} mb={2}>
+        {messages.filter(m => m.role === 'user').map((message) => (
+          <MessageBox
+            key={message.timestamp}
+            output={message.content}
+            isUser={true}
+            bg="#e5e7eb"
+          />
+        ))}
+        <div ref={messagesEndRef} />
+      </Box>
+      
+      {/* Speaking indicator moved to bottom */}
+      {isSpeaking && (
+        <Box
+          position="fixed"
+          bottom="80px"
+          left="50%"
+          transform="translateX(-50%)"
+          zIndex={5}
+          maxW="600px"
+          w="100%"
+          px={2}
+        >
+          <Flex align="center" gap={2} justify="center">
             <Box
               as="span"
               boxSize="16px"
@@ -141,16 +172,9 @@ export default function Home() {
             />
             <Text color="#222" fontWeight="500">Agent is speaking...</Text>
           </Flex>
-        )}
-        {messages.filter(m => m.role === 'user').map((message) => (
-          <MessageBox
-            key={message.timestamp}
-            output={message.content}
-            isUser={true}
-            bg="#e5e7eb"
-          />
-        ))}
-      </Box>
+        </Box>
+      )}
+      
       <Box as="form" onSubmit={(e: React.FormEvent) => {
         e.preventDefault();
         if (input.trim()) {
