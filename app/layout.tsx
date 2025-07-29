@@ -21,7 +21,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
     <html lang="en">
       <body id={'root'}>
         <AppWrappers>
-          {children}
+                  {children}
         </AppWrappers>
       </body>
     </html>

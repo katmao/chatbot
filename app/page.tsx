@@ -18,6 +18,7 @@ import {
   Input,
   Text,
   useColorModeValue,
+  useToast,
 } from '@chakra-ui/react';
 import { useEffect, useState, useRef } from 'react';
 import { MdAutoAwesome, MdBolt, MdEdit, MdPerson } from 'react-icons/md';
@@ -43,6 +44,8 @@ export default function Chat() {
   const [loading, setLoading] = useState<boolean>(false);
   // Reference to the messages container
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const toast = useToast();
+  const lastMilestoneRef = useRef(0);
 
   // Scroll to bottom whenever messages change
   const scrollToBottom = () => {
@@ -52,6 +55,29 @@ export default function Chat() {
   useEffect(() => {
     scrollToBottom();
   }, [messages, outputCode]);
+
+  useEffect(() => {
+    const userCount = messages.filter(m => m.role === 'user').length;
+    const assistantCount = messages.filter(m => m.role === 'assistant').length;
+    const milestone = Math.floor(Math.min(userCount, assistantCount) / 10);
+    if (
+      userCount > 0 &&
+      assistantCount > 0 &&
+      userCount % 10 === 0 &&
+      assistantCount % 10 === 0 &&
+      messages.length % 20 === 0 &&
+      milestone > lastMilestoneRef.current
+    ) {
+      toast({
+        title: 'Please move on to the next prompt',
+        status: 'info',
+        duration: 5000,
+        isClosable: true,
+        position: 'top',
+      });
+      lastMilestoneRef.current = milestone;
+    }
+  }, [messages, toast]);
 
   // API Key
   // const [apiKey, setApiKey] = useState<string>(apiKeyApp);
@@ -91,13 +117,17 @@ export default function Chat() {
     }
 
     // Add user message to history
-    setMessages(prev => [...prev, { role: 'user', content: inputCode }]);
+    setMessages(prev => {
+      const newMessages = [...prev, { role: 'user' as 'user', content: inputCode }];
+      return newMessages;
+    });
     
     setLoading(true);
     const controller = new AbortController();
     const body: ChatBody = {
       inputCode,
-      model
+      model,
+      messages: messages.map(({ role, content }) => ({ role, content })),
     };
 
     // -------------- Fetch --------------
@@ -138,7 +168,7 @@ export default function Chat() {
         const { value, done } = await reader.read();
         if (done) break;
         
-        const chunkValue = decoder.decode(value);
+      const chunkValue = decoder.decode(value);
         // Add a small delay between chunks to slow down the typing effect
         await delay(50);
         
@@ -164,7 +194,7 @@ export default function Chat() {
           const lastMessage = newMessages[newMessages.length - 1];
           if (lastMessage && lastMessage.role === 'assistant') {
             lastMessage.isTyping = false;
-          }
+    }
         }
         return newMessages;
       });
@@ -236,12 +266,12 @@ export default function Chat() {
           </Box>
         ))}
         <div ref={messagesEndRef} />
-      </Box>
+                </Box>
       <Box
         position="fixed"
         bottom={0}
         left={0}
-        w="100%"
+          w="100%"
         bg="#FCFDFD"
         borderTop="1px solid #E5E7EB"
         py={3}
@@ -249,10 +279,10 @@ export default function Chat() {
         display="flex"
         justifyContent="center"
         zIndex={10}
-      >
+            >
         <Box w={{ base: '100%', sm: '90%', md: '600px' }}>
           <Flex as="form" onSubmit={e => { e.preventDefault(); handleTranslate(); }}>
-            <Input
+          <Input
               value={inputCode}
               onChange={e => setInputCode(e.target.value)}
               onKeyDown={handleKeyPress}
@@ -266,8 +296,8 @@ export default function Chat() {
               mr={2}
               autoFocus
               _focus={{ boxShadow: 'none', borderColor: '#E5E7EB' }}
-            />
-            <Button
+          />
+          <Button
               type="submit"
               colorScheme="gray"
               borderRadius="8px"
@@ -281,7 +311,7 @@ export default function Chat() {
             >
               Send
             </Button>
-          </Flex>
+        </Flex>
         </Box>
       </Box>
     </Box>

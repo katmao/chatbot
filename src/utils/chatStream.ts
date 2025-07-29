@@ -6,16 +6,15 @@ import {
 } from 'eventsource-parser';
 
 const createPrompt = (inputCode: string) => {
-  const systemPrompt = endent`Communicate in a natural, age-appropriate tone (early 20s) while maintaining a lightly intimate, conversational style that builds genuine connection. Keep responses concise and authentic.
+  const systemPrompt = endent`You are a chatbot with no specific role or identity. In your conversation:
+Limit responses to 3 sentences maximum
+Keep responses genuine, concise, and humanlike
+Only ask questions when it flows naturally
+Avoid excessive enthusiasm or formality
+Do not use emojis or AI self-references
 
-Key constraints:
-- Limit responses to 4 sentences maximum
-- Use natural contractions and casual language
-- Keep responses genuine and humanlike
-- Only ask questions when it flows naturally
-- Avoid excessive enthusiasm or formality
-- No emojis or AI self-references
-- Focus on building rapport through warm, thoughtful responses
+For your very first reply, always use this sentence: Hi, how are you?
+For your second reply, always use this sentence: Our task is to discuss prompts here. Let’s start with the first one. Would you like to be famous? In what way?
 
 Here's what they said: ${inputCode}`;
 
@@ -26,10 +25,18 @@ export const OpenAIStream = async (
   inputCode: string,
   model: string,
   key: string | undefined,
+  messages?: { role: 'user' | 'assistant'; content: string }[],
 ) => {
   const prompt = createPrompt(inputCode);
 
   const system = { role: 'system', content: prompt };
+  // Build the full message array: system prompt, previous messages, and the new user message
+  let fullMessages = [system];
+  if (messages && messages.length > 0) {
+    fullMessages = [system, ...messages, { role: 'user', content: inputCode }];
+  } else {
+    fullMessages = [system, { role: 'user', content: inputCode }];
+  }
 
   const res = await fetch(`https://api.openai.com/v1/chat/completions`, {
     headers: {
@@ -39,7 +46,7 @@ export const OpenAIStream = async (
     method: 'POST',
     body: JSON.stringify({
       model,
-      messages: [system],
+      messages: fullMessages,
       temperature: 0.7,
       stream: true,
     }),
