@@ -23,12 +23,22 @@ import {
 import { useEffect, useState, useRef } from 'react';
 import { MdAutoAwesome, MdBolt, MdEdit, MdPerson } from 'react-icons/md';
 import Bg from '../public/img/chat/bg-image.png';
+import { logChatInteraction, exportChatInteractionsByPidAsCSV } from '@/lib/firebase';
 
 interface Message {
   role: 'user' | 'assistant';
   content: string;
   isTyping?: boolean;
 }
+
+// Function to get PROLIFIC_PID from URL parameters
+const getProlificPid = (): string => {
+  if (typeof window !== 'undefined') {
+    const urlParams = new URLSearchParams(window.location.search);
+    return urlParams.get('PROLIFIC_PID') || 'unknown_pid';
+  }
+  return 'unknown_pid';
+};
 
 export default function Chat() {
   // Input States
@@ -46,6 +56,29 @@ export default function Chat() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const toast = useToast();
   const lastMilestoneRef = useRef(0);
+  // Session ID for tracking conversations
+  const [sessionId] = useState(() => `session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`);
+  // Turn counter
+  const [turnNumber, setTurnNumber] = useState(0);
+  // Prolific PID
+  const [prolificPid] = useState(() => getProlificPid());
+
+  // Debug loading state
+  useEffect(() => {
+    console.log('Loading state changed:', loading);
+  }, [loading]);
+
+  // Force reset loading state if stuck for more than 30 seconds
+  useEffect(() => {
+    if (loading) {
+      const timeout = setTimeout(() => {
+        console.log('Forcing loading state reset due to timeout');
+        setLoading(false);
+      }, 30000);
+      
+      return () => clearTimeout(timeout);
+    }
+  }, [loading]);
 
   // Scroll to bottom whenever messages change
   const scrollToBottom = () => {
@@ -116,16 +149,21 @@ export default function Chat() {
       return;
     }
 
+    // Store the message and clear input immediately
+    const currentMessage = inputCode;
+    setInputCode(''); // Clear input right away
+    
     // Add user message to history
     setMessages(prev => {
-      const newMessages = [...prev, { role: 'user' as 'user', content: inputCode }];
+      const newMessages = [...prev, { role: 'user' as 'user', content: currentMessage }];
       return newMessages;
     });
     
     setLoading(true);
+    console.log('Loading started');
     const controller = new AbortController();
     const body: ChatBody = {
-      inputCode,
+      inputCode: currentMessage, // Use stored message
       model,
       messages: messages.map(({ role, content }) => ({ role, content })),
     };
@@ -142,6 +180,7 @@ export default function Chat() {
 
     if (!response.ok) {
       setLoading(false);
+      console.log('Loading stopped - response not ok');
       alert('Something went wrong with the API request. Please check the server configuration.');
       return;
     }
@@ -150,6 +189,7 @@ export default function Chat() {
 
     if (!data) {
       setLoading(false);
+      console.log('Loading stopped - no data');
       alert('Something went wrong');
       return;
     }
@@ -186,7 +226,19 @@ export default function Chat() {
           return newMessages;
         });
       }
+      
+      // Reset loading state immediately after stream is complete
+      setLoading(false);
+      console.log('Loading stopped - stream complete');
+      
+    } catch (error) {
+      console.error('Error reading stream:', error);
+      // Ensure loading is reset even if stream reading fails
+      setLoading(false);
+      console.log('Loading stopped - stream error');
+      return;
     } finally {
+      console.log('Finally block reached');
       // Ensure typing indicator is removed when done
       setMessages(prev => {
         const newMessages = [...prev];
@@ -194,12 +246,33 @@ export default function Chat() {
           const lastMessage = newMessages[newMessages.length - 1];
           if (lastMessage && lastMessage.role === 'assistant') {
             lastMessage.isTyping = false;
-    }
+          }
         }
         return newMessages;
       });
-      setLoading(false);
-      setInputCode('');
+      
+      // Log the chat interaction to Firebase (don't let this block loading reset)
+      if (accumulatedResponse) {
+        try {
+          const currentTurn = turnNumber + 1;
+          setTurnNumber(currentTurn);
+          
+          await logChatInteraction({
+            userMessage: currentMessage, // Use stored message
+            assistantMessage: accumulatedResponse,
+            turnNumber: currentTurn,
+            sessionId: sessionId,
+            prolificPid: prolificPid
+          });
+          
+          console.log(`Chat interaction logged for turn ${currentTurn}`);
+        } catch (error) {
+          console.error('Failed to log chat interaction:', error);
+          // Don't show error to user, just log it
+        }
+      }
+      
+      // Loading state is already reset above, so no need to reset again
     }
   };
   // -------------- Copy Response --------------
@@ -232,8 +305,46 @@ export default function Chat() {
     setInputCode(Event.target.value);
   };
 
+  const handleExportCSV = async () => {
+    try {
+      await exportChatInteractionsByPidAsCSV(prolificPid);
+      toast({
+        title: 'Export Successful',
+        description: `Chat interactions for PID ${prolificPid} have been exported as CSV`,
+        status: 'success',
+        duration: 3000,
+        isClosable: true,
+      });
+    } catch (error) {
+      console.error('Export failed:', error);
+      toast({
+        title: 'Export Failed',
+        description: 'Failed to export chat interactions',
+        status: 'error',
+        duration: 3000,
+        isClosable: true,
+      });
+    }
+  };
+
   return (
     <Box minH="100vh" bg="#FCFDFD" display="flex" flexDirection="column" justifyContent="flex-start" alignItems="center">
+      {/* Prolific PID Display */}
+      <Box
+        position="fixed"
+        top={4}
+        left={4}
+        zIndex={20}
+        bg="gray.100"
+        px={3}
+        py={2}
+        borderRadius="8px"
+        fontSize="sm"
+        color="gray.700"
+      >
+        PID: {prolificPid}
+      </Box>
+      
       <Box
         w={{ base: '100%', sm: '90%', md: '600px' }}
         maxW="100%"
@@ -281,7 +392,12 @@ export default function Chat() {
         zIndex={10}
             >
         <Box w={{ base: '100%', sm: '90%', md: '600px' }}>
-          <Flex as="form" onSubmit={e => { e.preventDefault(); handleTranslate(); }}>
+          <Flex as="form" onSubmit={e => { 
+            e.preventDefault(); 
+            if (inputCode.trim()) {
+              handleTranslate(); 
+            }
+          }}>
           <Input
               value={inputCode}
               onChange={e => setInputCode(e.target.value)}
@@ -303,7 +419,7 @@ export default function Chat() {
               borderRadius="8px"
               px={6}
               isLoading={loading}
-              disabled={loading}
+              disabled={loading || !inputCode.trim()}
               bg="#E5E7EB"
               color="#222"
               _hover={{ bg: '#D1D5DB' }}
