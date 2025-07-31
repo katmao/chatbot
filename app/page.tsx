@@ -329,22 +329,6 @@ export default function Chat() {
 
   return (
     <Box minH="100vh" bg="#FCFDFD" display="flex" flexDirection="column" justifyContent="flex-start" alignItems="center">
-      {/* Prolific PID Display */}
-      <Box
-        position="fixed"
-        top={4}
-        left={4}
-        zIndex={20}
-        bg="gray.100"
-        px={3}
-        py={2}
-        borderRadius="8px"
-        fontSize="sm"
-        color="gray.700"
-      >
-        PID: {prolificPid}
-      </Box>
-      
       <Box
         w={{ base: '100%', sm: '90%', md: '600px' }}
         maxW="100%"
