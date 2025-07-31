@@ -28,6 +28,7 @@
     "@uiw/react-codemirror": "^4.19.11",
     "endent": "^2.1.0",
     "eventsource-parser": "^1.0.0",
+    "firebase": "^12.0.0",
     "framer-motion": "^4.1.17",
     "marked": "^15.0.12",
     "next": "^15.1.6",

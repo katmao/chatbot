@@ -27,6 +27,7 @@ import { MdAutoAwesome, MdBolt, MdEdit, MdPerson, MdVolumeUp } from 'react-icons
 import Bg from '../public/img/chat/bg-image.png';
 import { ChatMessage, ChatState } from '@/types/chat';
 import { keyframes } from '@emotion/react';
+import { logVoiceInteraction } from '@/lib/firebase';
 
 interface Message {
   role: 'user' | 'assistant';
@@ -84,6 +85,24 @@ export default function Home() {
               timestamp: Date.now()
             }
           ]));
+          
+          // Save voice interaction to Firebase
+          try {
+            const sessionId = `session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+            const prolificPid = new URLSearchParams(window.location.search).get('PROLIFIC_PID') || 'unknown_pid';
+            const turnNumber = Math.floor((updatedMessages.length + 1) / 2);
+            
+            await logVoiceInteraction({
+              userMessage: text,
+              assistantMessage: data,
+              turnNumber: turnNumber,
+              sessionId: sessionId,
+              prolificPid: prolificPid,
+              interactionType: 'voice'
+            });
+          } catch (firebaseError) {
+            console.error('Error saving to Firebase:', firebaseError);
+          }
           // Play assistant response as audio only
           const speechResponse = await fetch('/api/text-to-speech', {
             method: 'POST',
