@@ -137,9 +137,9 @@ export default function Home() {
     const assistantCount = messages.filter(m => m.role === 'assistant').length;
     const totalTurns = Math.min(userCount, assistantCount);
     
-    // Show notifications at 5, 10, 15, 20, 25, 30, 35, 40, 45, 50 turns
-    if (totalTurns > 0 && totalTurns % 5 === 0 && totalTurns > lastMilestoneRef.current) {
-      const promptNumber = Math.floor(totalTurns / 5);
+    // Show notifications at 6, 12, 18, 24, 30, 36, 42, 48, 54, 60 turns
+    if (totalTurns > 0 && totalTurns % 6 === 0 && totalTurns > lastMilestoneRef.current) {
+      const promptNumber = Math.floor(totalTurns / 6);
       let message = '';
       
       if (promptNumber === 1) {
