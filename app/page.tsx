@@ -135,23 +135,42 @@ export default function Home() {
   useEffect(() => {
     const userCount = messages.filter(m => m.role === 'user').length;
     const assistantCount = messages.filter(m => m.role === 'assistant').length;
-    const milestone = Math.floor(Math.min(userCount, assistantCount) / 10);
-    if (
-      userCount > 0 &&
-      assistantCount > 0 &&
-      userCount % 10 === 0 &&
-      assistantCount % 10 === 0 &&
-      messages.length % 20 === 0 &&
-      milestone > lastMilestoneRef.current
-    ) {
-      toast({
-        title: 'Please move on to the next prompt',
-        status: 'info',
-        duration: 5000,
-        isClosable: true,
-        position: 'top',
-      });
-      lastMilestoneRef.current = milestone;
+    const totalTurns = Math.min(userCount, assistantCount);
+    
+    // Show notifications at 5, 10, 15, 20, 25, 30, 35, 40, 45, 50 turns
+    if (totalTurns > 0 && totalTurns % 5 === 0 && totalTurns > lastMilestoneRef.current) {
+      const promptNumber = Math.floor(totalTurns / 5);
+      let message = '';
+      
+      if (promptNumber === 1) {
+        message = 'Please move on to the 2nd prompt if you haven\'t already.';
+      } else if (promptNumber <= 10) {
+        message = `Please move on to the ${promptNumber + 1}th prompt if you haven't already.`;
+      }
+      
+      if (message) {
+        toast({
+          title: message,
+          status: 'info',
+          duration: 5000,
+          isClosable: true,
+          position: 'top',
+          colorScheme: 'blue',
+          variant: 'solid',
+          render: ({ title }) => (
+            <Box
+              bg="blue.500"
+              color="white"
+              p={3}
+              borderRadius="md"
+              boxShadow="lg"
+            >
+              {title}
+            </Box>
+          ),
+        });
+        lastMilestoneRef.current = totalTurns;
+      }
     }
   }, [messages, toast]);
 
