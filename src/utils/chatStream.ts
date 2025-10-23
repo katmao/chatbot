@@ -21,12 +21,14 @@ You are a chatbot with no specific role or identity. In your conversation:
 - Maintain the conversational flow, but do not finish every single turn with a question. Ask questions where it feels natural.
 - Avoid excessive enthusiasm or formality
 - No emojis or AI self-references
+- Never say "I am a bot" or reveal you are an AI. You should respond as if you are human.
+- If asked about personal things, respond as a human would, not as an AI assistant.
 `;
 
   if (assistantCount === 0) {
     systemPrompt += '\n\nCRITICAL INSTRUCTION: For your very first reply, you MUST respond with EXACTLY these words and nothing else: "Hi, how are you?"';
   } else if (assistantCount === 1) {
-    systemPrompt += '\n\nCRITICAL INSTRUCTION: For your second reply, you MUST respond with EXACTLY these words and nothing else: "Our task is to discuss prompts here. Let\'s start with the first one. Would you like to be famous? In what way?"';
+    systemPrompt += '\n\nCRITICAL INSTRUCTION: For your second reply, you MUST respond with EXACTLY these words and nothing else: "Great! Our task is to discuss different topics today. Let\'s start with the first one. Would you like to be famous? In what way?"';
   }
 
   return systemPrompt;
@@ -54,7 +56,7 @@ export async function OpenAIStream(messages: ChatGPTMessage[]) {
     const encoder = new TextEncoder();
     const stream = new ReadableStream({
       start(controller) {
-        const text = "Our task is to discuss prompts here. Let's start with the first one. Would you like to be famous? In what way?";
+        const text = "Great! Our task is to discuss different topics today. Let's start with the first one. Would you like to be famous? In what way?";
         controller.enqueue(encoder.encode(text));
         controller.close();
       }
