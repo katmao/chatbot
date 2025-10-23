@@ -143,9 +143,15 @@ export default function Home() {
       let message = '';
       
       if (promptNumber === 1) {
-        message = 'Please move on to the 2nd prompt if you haven\'t already.';
+        message = 'Please move on to the 2nd topic if you haven\'t already.';
       } else if (promptNumber <= 10) {
-        message = `Please move on to the ${promptNumber + 1}th prompt if you haven't already.`;
+        const topicNumber = promptNumber + 1;
+        let ordinal = 'th';
+        if (topicNumber === 1) ordinal = 'st';
+        else if (topicNumber === 2) ordinal = 'nd';
+        else if (topicNumber === 3) ordinal = 'rd';
+        else if (topicNumber >= 4) ordinal = 'th';
+        message = `Please move on to the ${topicNumber}${ordinal} topic if you haven't already.`;
       }
       
       if (message) {
