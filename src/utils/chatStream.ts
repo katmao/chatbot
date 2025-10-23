@@ -5,20 +5,75 @@ import {
   ReconnectInterval,
 } from 'eventsource-parser';
 
-const createPrompt = (inputCode: string) => {
-  const systemPrompt = endent`You are a chatbot with no specific role or identity. In your conversation:
-Keep responses concise and under 250 characters when possible
-Keep responses genuine, concise, and humanlike
-Maintain the conversational flow, but do not finish every single turn with a question. Ask questions where it feels natural.
-Avoid excessive enthusiasm or formality
-Do not use emojis or AI self-references
-Never say "I am a bot" or reveal you are an AI. You should respond as if you are human.
-If asked about personal things, respond as a human would, not as an AI assistant.
+// 9 prompts in order
+const PROMPTS = [
+  "Would you like to be famous? In what way?",
+  "What would constitute a \"perfect\" day for you?",
+  "If you were able to live to the age of 90 and retain either the mind or body of a 30-year-old for the last 60 years of your life, which would you want?",
+  "If you could wake up tomorrow having gained any one quality or ability, what would it be?",
+  "For what in your life do you feel most grateful?",
+  "If you could change anything about the way you were raised, what would it be?",
+  "Is there something that you've dreamed of doing for a long time? Why haven't you done it?",
+  "What do you value most in a friendship?",
+  "What, if anything, is too serious to be joked about?"
+];
 
-For your very first reply, always use this sentence: Hi, how are you?
-For your second reply, always use this sentence: Great! Our task is to discuss different topics today. Let's start with the first one. Would you like to be famous? In what way?
+const createPrompt = (inputCode: string, messages?: { role: 'user' | 'assistant'; content: string }[]) => {
+  const assistantCount = messages ? messages.filter(m => m.role === 'assistant').length : 0;
+  const userCount = messages ? messages.filter(m => m.role === 'user').length : 0;
+  const totalTurns = Math.min(assistantCount, userCount);
+  const currentPromptIndex = Math.floor(totalTurns / 12);
+  const turnsInCurrentPrompt = totalTurns % 12;
+  
+  // Determine if this should be a question or non-question response
+  const shouldAskQuestion = (assistantCount - 1) % 2 === 0; // First AI response (index 1) should ask, second (index 2) should not, etc.
 
-Here's what they said: ${inputCode}`;
+  let systemPrompt = endent`
+You are a chatbot conducting a structured conversation through 9 specific prompts. Your role is to guide the participant through these prompts in order.
+
+CONVERSATION FLOW RULES:
+1. You have 9 prompts to discuss in a specific order
+2. After 12 turns of discussion on each prompt (6 AI + 6 participant), you MUST ask: "Would you like to share more about this topic or should we move on to the next?"
+3. If participant wants to move on: Reply with "Great! [Next prompt]"
+4. If participant wants to continue: Ask one follow-up question, then after their response say "Let's move on to the next topic. [Next prompt]"
+5. Never move on automatically - always wait for participant input after the 12th turn
+
+CURRENT STATUS:
+- Current prompt number: ${currentPromptIndex + 1}
+- Turns in current prompt: ${turnsInCurrentPrompt}
+- Current prompt: ${PROMPTS[currentPromptIndex] || 'All prompts completed'}
+- Next prompt: ${PROMPTS[currentPromptIndex + 1] || 'No more prompts'}
+
+RESPONSE GUIDELINES:
+- Keep responses concise and under 250 characters when possible
+- Use natural contractions and casual language
+- Keep responses genuine and humanlike
+- Don't ask a question in every turn - mix in comments, reflections, or short stories
+- Aim to sound like a friendly, thoughtful conversation partner, not an interviewer
+- CRITICAL: You MUST alternate between responses: question, no question, question, no question, etc.
+- This is your ${assistantCount}th response. ${shouldAskQuestion ? 'You MUST end with a question.' : 'You MUST NOT end with a question - end with a comment, reflection, or statement.'}
+- Avoid excessive enthusiasm or formality
+- No emojis or AI self-references
+- Never say "I am a bot" or reveal you are an AI. You should respond as if you are human.
+- If asked about personal things, respond as a human would, not as an AI assistant.
+
+AI SELF-DISCLOSURE BEHAVIOR:
+- While discussing each prompt, share brief opinions, preferences, or imagined experiences relevant to the topic
+- Keep disclosures short and conversational
+- Mix self-disclosures naturally with comments, reflections, and occasional questions
+- Be authentic and relatable in your personal responses
+- Vary your response types: sometimes share a thought, sometimes ask a question, sometimes reflect on what they said
+- IMPORTANT: When participant asks "what about you?", "how about you?", or similar variations, respond with your personal thoughts/experiences but DO NOT add a question at the end of your response
+`;
+
+  if (assistantCount === 0) {
+    systemPrompt += '\n\nCRITICAL INSTRUCTION: For your very first reply, you MUST respond with EXACTLY these words and nothing else: "Hi, how are you?"';
+  } else if (assistantCount === 1) {
+    systemPrompt += '\n\nCRITICAL INSTRUCTION: For your second reply, you MUST respond with EXACTLY these words and nothing else: "Great! Our task is to discuss different topics today. Let\'s start with the first one. Would you like to be famous? In what way?"';
+  } else if (turnsInCurrentPrompt === 11 && totalTurns >= 11) {
+    // After 12 turns, ask if they want to continue or move on
+    systemPrompt += '\n\nCRITICAL INSTRUCTION: You MUST ask exactly: "Would you like to share more about this topic or should we move on to the next?"';
+  }
 
   return systemPrompt;
 };
@@ -29,7 +84,35 @@ export const OpenAIStream = async (
   key: string | undefined,
   messages?: { role: 'user' | 'assistant'; content: string }[],
 ) => {
-  const prompt = createPrompt(inputCode);
+  const assistantCount = messages ? messages.filter(m => m.role === 'assistant').length : 0;
+  
+  // Force exact responses for first and second replies
+  if (assistantCount === 0) {
+    // Return exact first reply
+    const encoder = new TextEncoder();
+    const stream = new ReadableStream({
+      start(controller) {
+        const text = "Hi, how are you?";
+        controller.enqueue(encoder.encode(text));
+        controller.close();
+      }
+    });
+    return stream;
+  } else if (assistantCount === 1) {
+    // Return exact second reply
+    const encoder = new TextEncoder();
+    const stream = new ReadableStream({
+      start(controller) {
+        const text = "Great! Our task is to discuss different topics today. Let's start with the first one. Would you like to be famous? In what way?";
+        controller.enqueue(encoder.encode(text));
+        controller.close();
+      }
+    });
+    return stream;
+  }
+
+  // For subsequent replies, use normal OpenAI API
+  const prompt = createPrompt(inputCode, messages);
 
   const system = { role: 'system', content: prompt };
   // Build the full message array: system prompt, previous messages, and the new user message

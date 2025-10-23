@@ -89,53 +89,7 @@ export default function Chat() {
     scrollToBottom();
   }, [messages, outputCode]);
 
-  useEffect(() => {
-    const userCount = messages.filter(m => m.role === 'user').length;
-    const assistantCount = messages.filter(m => m.role === 'assistant').length;
-    const totalTurns = Math.min(userCount, assistantCount);
-    
-    // Show notifications at 6, 12, 18, 24, 30, 36, 42, 48, 54, 60 turns
-    if (totalTurns > 0 && totalTurns % 6 === 0 && totalTurns > lastMilestoneRef.current) {
-      const promptNumber = Math.floor(totalTurns / 6);
-      let message = '';
-      
-      if (promptNumber === 1) {
-        message = 'Please move on to the 2nd topic if you haven\'t already.';
-      } else if (promptNumber <= 10) {
-        const topicNumber = promptNumber + 1;
-        let ordinal = 'th';
-        if (topicNumber === 1) ordinal = 'st';
-        else if (topicNumber === 2) ordinal = 'nd';
-        else if (topicNumber === 3) ordinal = 'rd';
-        else if (topicNumber >= 4) ordinal = 'th';
-        message = `Please move on to the ${topicNumber}${ordinal} topic if you haven't already.`;
-      }
-      
-      if (message) {
-        toast({
-          title: message,
-          status: 'info',
-          duration: 5000,
-          isClosable: true,
-          position: 'top',
-          colorScheme: 'blue',
-          variant: 'solid',
-          render: ({ title }) => (
-            <Box
-              bg="blue.500"
-              color="white"
-              p={3}
-              borderRadius="md"
-              boxShadow="lg"
-            >
-              {title}
-            </Box>
-          ),
-        });
-        lastMilestoneRef.current = totalTurns;
-      }
-    }
-  }, [messages, toast]);
+  // Notification system removed - AI now handles prompt transitions automatically
 
   // API Key
   // const [apiKey, setApiKey] = useState<string>(apiKeyApp);
