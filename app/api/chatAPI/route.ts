@@ -5,7 +5,7 @@ export const runtime = 'edge';
 
 export async function GET(req: Request): Promise<Response> {
   try {
-    const { messages } = await req.json();
+    const { inputCode, model, messages } = (await req.json()) as ChatBody;
 
     if (!messages || !Array.isArray(messages)) {
       return new Response('No messages provided', { status: 400 });
@@ -15,7 +15,7 @@ export async function GET(req: Request): Promise<Response> {
       return new Response('OpenAI API key not configured', { status: 500 });
     }
 
-    const stream = await OpenAIStream(messages);
+    const stream = await OpenAIStream(inputCode, model, process.env.OPENAI_API_KEY, messages);
     return new Response(stream);
   } catch (error) {
     console.error(error);
@@ -25,7 +25,7 @@ export async function GET(req: Request): Promise<Response> {
 
 export async function POST(req: Request) {
   try {
-    const { messages } = await req.json();
+    const { inputCode, model, messages } = (await req.json()) as ChatBody;
 
     if (!messages || !Array.isArray(messages)) {
       return new Response('No messages provided', { status: 400 });
@@ -35,7 +35,7 @@ export async function POST(req: Request) {
       return new Response('OpenAI API key not configured', { status: 500 });
     }
 
-    const stream = await OpenAIStream(messages);
+    const stream = await OpenAIStream(inputCode, model, process.env.OPENAI_API_KEY, messages);
     return new Response(stream);
   } catch (error) {
     console.error(error);

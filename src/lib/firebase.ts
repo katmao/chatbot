@@ -37,6 +37,17 @@ export interface ChatInteraction {
   prolificPid: string; // Add Prolific participant ID
 }
 
+// Voice interaction interface
+export interface VoiceInteraction {
+  timestamp: Timestamp;
+  userMessage: string;
+  assistantMessage: string;
+  turnNumber: number;
+  sessionId: string;
+  prolificPid: string;
+  interactionType: 'voice'; // Mark as voice interaction
+}
+
 // Log a chat interaction
 export const logChatInteraction = async (interaction: Omit<ChatInteraction, 'timestamp'>) => {
   try {
@@ -49,6 +60,27 @@ export const logChatInteraction = async (interaction: Omit<ChatInteraction, 'tim
     return docRef.id;
   } catch (error) {
     console.error('Error logging chat interaction: ', error);
+    console.error('Error details:', {
+      message: error instanceof Error ? error.message : 'Unknown error',
+      code: error instanceof Error && 'code' in error ? (error as any).code : 'Unknown code',
+      stack: error instanceof Error ? error.stack : 'No stack trace'
+    });
+    throw error;
+  }
+};
+
+// Log a voice interaction
+export const logVoiceInteraction = async (interaction: Omit<VoiceInteraction, 'timestamp'>) => {
+  try {
+    console.log('Attempting to log voice interaction:', interaction);
+    const docRef = await addDoc(collection(db, 'voice_interactions'), {
+      ...interaction,
+      timestamp: Timestamp.now()
+    });
+    console.log('Voice interaction logged with ID: ', docRef.id);
+    return docRef.id;
+  } catch (error) {
+    console.error('Error logging voice interaction: ', error);
     console.error('Error details:', {
       message: error instanceof Error ? error.message : 'Unknown error',
       code: error instanceof Error && 'code' in error ? (error as any).code : 'Unknown code',

@@ -1,9 +1,5 @@
 import endent from 'endent';
-import {
-  createParser,
-  ParsedEvent,
-  ReconnectInterval,
-} from 'eventsource-parser';
+const { createParser } = require('eventsource-parser');
 
 // 9 prompts in order
 const PROMPTS = [
@@ -152,7 +148,7 @@ export const OpenAIStream = async (
 
   const stream = new ReadableStream({
     async start(controller) {
-      const onParse = (event: ParsedEvent | ReconnectInterval) => {
+      const onParse = (event: any) => {
         if (event.type === 'event') {
           const data = event.data;
 
