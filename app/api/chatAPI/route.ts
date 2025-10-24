@@ -7,32 +7,38 @@ export async function GET(req: Request): Promise<Response> {
   try {
     const { inputCode, model, messages } = (await req.json()) as ChatBody;
 
-    const apiKey = process.env.OPENAI_API_KEY;
-    if (!apiKey?.includes('sk-')) {
+    if (!messages || !Array.isArray(messages)) {
+      return new Response('No messages provided', { status: 400 });
+    }
+
+    if (!process.env.OPENAI_API_KEY) {
       return new Response('OpenAI API key not configured', { status: 500 });
     }
 
-    const stream = await OpenAIStream(inputCode, model, apiKey, messages);
+    const stream = await OpenAIStream(inputCode, model, process.env.OPENAI_API_KEY, messages);
     return new Response(stream);
   } catch (error) {
     console.error(error);
-    return new Response('Error', { status: 500 });
+    return new Response('Error processing your request', { status: 500 });
   }
 }
 
-export async function POST(req: Request): Promise<Response> {
+export async function POST(req: Request) {
   try {
     const { inputCode, model, messages } = (await req.json()) as ChatBody;
 
-    const apiKey = process.env.OPENAI_API_KEY;
-    if (!apiKey?.includes('sk-')) {
+    if (!messages || !Array.isArray(messages)) {
+      return new Response('No messages provided', { status: 400 });
+    }
+
+    if (!process.env.OPENAI_API_KEY) {
       return new Response('OpenAI API key not configured', { status: 500 });
     }
 
-    const stream = await OpenAIStream(inputCode, model, apiKey, messages);
+    const stream = await OpenAIStream(inputCode, model, process.env.OPENAI_API_KEY, messages);
     return new Response(stream);
   } catch (error) {
     console.error(error);
-    return new Response('Error', { status: 500 });
+    return new Response('Error processing your request', { status: 500 });
   }
 }
