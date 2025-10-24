@@ -2,6 +2,7 @@ import { initializeApp } from 'firebase/app';
 import { getFirestore, collection, addDoc, getDocs, query, orderBy, Timestamp } from 'firebase/firestore';
 
 // Your Firebase configuration
+// You'll need to replace these with your actual Firebase project credentials
 const firebaseConfig = {
   apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
   authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN,
@@ -26,29 +27,28 @@ const db = getFirestore(app);
 
 console.log('Firebase initialized successfully');
 
-// Voice interaction interface
-export interface VoiceInteraction {
+// Chat interaction interface
+export interface ChatInteraction {
   timestamp: Timestamp;
   userMessage: string;
   assistantMessage: string;
   turnNumber: number;
   sessionId: string;
-  prolificPid: string;
-  interactionType: 'voice'; // Mark as voice interaction
+  prolificPid: string; // Add Prolific participant ID
 }
 
-// Log a voice interaction
-export const logVoiceInteraction = async (interaction: Omit<VoiceInteraction, 'timestamp'>) => {
+// Log a chat interaction
+export const logChatInteraction = async (interaction: Omit<ChatInteraction, 'timestamp'>) => {
   try {
-    console.log('Attempting to log voice interaction:', interaction);
-    const docRef = await addDoc(collection(db, 'voice_interactions'), {
+    console.log('Attempting to log chat interaction:', interaction);
+    const docRef = await addDoc(collection(db, 'chat_interactions'), {
       ...interaction,
       timestamp: Timestamp.now()
     });
-    console.log('Voice interaction logged with ID: ', docRef.id);
+    console.log('Chat interaction logged with ID: ', docRef.id);
     return docRef.id;
   } catch (error) {
-    console.error('Error logging voice interaction: ', error);
+    console.error('Error logging chat interaction: ', error);
     console.error('Error details:', {
       message: error instanceof Error ? error.message : 'Unknown error',
       code: error instanceof Error && 'code' in error ? (error as any).code : 'Unknown code',
@@ -58,58 +58,58 @@ export const logVoiceInteraction = async (interaction: Omit<VoiceInteraction, 't
   }
 };
 
-// Get all voice interactions
-export const getVoiceInteractions = async () => {
+// Get all chat interactions
+export const getChatInteractions = async () => {
   try {
-    const q = query(collection(db, 'voice_interactions'), orderBy('timestamp', 'desc'));
+    const q = query(collection(db, 'chat_interactions'), orderBy('timestamp', 'desc'));
     const querySnapshot = await getDocs(q);
-    const interactions: VoiceInteraction[] = [];
+    const interactions: ChatInteraction[] = [];
     querySnapshot.forEach((doc) => {
-      interactions.push(doc.data() as VoiceInteraction);
+      interactions.push(doc.data() as ChatInteraction);
     });
     return interactions;
   } catch (error) {
-    console.error('Error getting voice interactions: ', error);
+    console.error('Error getting chat interactions: ', error);
     throw error;
   }
 };
 
-// Get voice interactions by Prolific PID
-export const getVoiceInteractionsByPid = async (prolificPid: string) => {
+// Get chat interactions by Prolific PID
+export const getChatInteractionsByPid = async (prolificPid: string) => {
   try {
     const q = query(
-      collection(db, 'voice_interactions'), 
+      collection(db, 'chat_interactions'), 
       orderBy('timestamp', 'desc')
     );
     const querySnapshot = await getDocs(q);
-    const interactions: VoiceInteraction[] = [];
+    const interactions: ChatInteraction[] = [];
     querySnapshot.forEach((doc) => {
-      const data = doc.data() as VoiceInteraction;
+      const data = doc.data() as ChatInteraction;
       if (data.prolificPid === prolificPid) {
         interactions.push(data);
       }
     });
     return interactions;
   } catch (error) {
-    console.error('Error getting voice interactions by PID: ', error);
+    console.error('Error getting chat interactions by PID: ', error);
     throw error;
   }
 };
 
-// Export voice interactions as CSV
-export const exportVoiceInteractionsAsCSV = async () => {
+// Export chat interactions as CSV
+export const exportChatInteractionsAsCSV = async () => {
   try {
-    const interactions = await getVoiceInteractions();
+    const interactions = await getChatInteractions();
     
     // Create CSV header
-    const csvHeader = 'Timestamp,User Message,Assistant Message,Turn Number,Session ID,Prolific PID,Interaction Type\n';
+    const csvHeader = 'Timestamp,User Message,Assistant Message,Turn Number,Session ID,Prolific PID\n';
     
     // Create CSV rows
     const csvRows = interactions.map(interaction => {
       const timestamp = interaction.timestamp.toDate().toISOString();
       const userMessage = `"${interaction.userMessage.replace(/"/g, '""')}"`;
       const assistantMessage = `"${interaction.assistantMessage.replace(/"/g, '""')}"`;
-      return `${timestamp},${userMessage},${assistantMessage},${interaction.turnNumber},${interaction.sessionId},${interaction.prolificPid},"${interaction.interactionType}"`;
+      return `${timestamp},${userMessage},${assistantMessage},${interaction.turnNumber},${interaction.sessionId},${interaction.prolificPid}`;
     }).join('\n');
     
     const csvContent = csvHeader + csvRows;
@@ -119,7 +119,7 @@ export const exportVoiceInteractionsAsCSV = async () => {
     const link = document.createElement('a');
     const url = URL.createObjectURL(blob);
     link.setAttribute('href', url);
-    link.setAttribute('download', `voice_interactions_${new Date().toISOString().split('T')[0]}.csv`);
+    link.setAttribute('download', `chat_interactions_${new Date().toISOString().split('T')[0]}.csv`);
     link.style.visibility = 'hidden';
     document.body.appendChild(link);
     link.click();
@@ -127,25 +127,25 @@ export const exportVoiceInteractionsAsCSV = async () => {
     
     return csvContent;
   } catch (error) {
-    console.error('Error exporting voice interactions: ', error);
+    console.error('Error exporting chat interactions: ', error);
     throw error;
   }
 };
 
-// Export voice interactions for specific Prolific PID as CSV
-export const exportVoiceInteractionsByPidAsCSV = async (prolificPid: string) => {
+// Export chat interactions for specific Prolific PID as CSV
+export const exportChatInteractionsByPidAsCSV = async (prolificPid: string) => {
   try {
-    const interactions = await getVoiceInteractionsByPid(prolificPid);
+    const interactions = await getChatInteractionsByPid(prolificPid);
     
     // Create CSV header
-    const csvHeader = 'Timestamp,User Message,Assistant Message,Turn Number,Session ID,Prolific PID,Interaction Type\n';
+    const csvHeader = 'Timestamp,User Message,Assistant Message,Turn Number,Session ID,Prolific PID\n';
     
     // Create CSV rows
     const csvRows = interactions.map(interaction => {
       const timestamp = interaction.timestamp.toDate().toISOString();
       const userMessage = `"${interaction.userMessage.replace(/"/g, '""')}"`;
       const assistantMessage = `"${interaction.assistantMessage.replace(/"/g, '""')}"`;
-      return `${timestamp},${userMessage},${assistantMessage},${interaction.turnNumber},${interaction.sessionId},${interaction.prolificPid},"${interaction.interactionType}"`;
+      return `${timestamp},${userMessage},${assistantMessage},${interaction.turnNumber},${interaction.sessionId},${interaction.prolificPid}`;
     }).join('\n');
     
     const csvContent = csvHeader + csvRows;
@@ -155,7 +155,7 @@ export const exportVoiceInteractionsByPidAsCSV = async (prolificPid: string) => 
     const link = document.createElement('a');
     const url = URL.createObjectURL(blob);
     link.setAttribute('href', url);
-    link.setAttribute('download', `voice_interactions_${prolificPid}_${new Date().toISOString().split('T')[0]}.csv`);
+    link.setAttribute('download', `chat_interactions_${prolificPid}_${new Date().toISOString().split('T')[0]}.csv`);
     link.style.visibility = 'hidden';
     document.body.appendChild(link);
     link.click();
@@ -163,7 +163,7 @@ export const exportVoiceInteractionsByPidAsCSV = async (prolificPid: string) => 
     
     return csvContent;
   } catch (error) {
-    console.error('Error exporting voice interactions by PID: ', error);
+    console.error('Error exporting chat interactions by PID: ', error);
     throw error;
   }
 };

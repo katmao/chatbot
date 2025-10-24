@@ -1,43 +1,90 @@
 import endent from 'endent';
-const { createParser } = require('eventsource-parser');
+import {
+  createParser,
+  ParsedEvent,
+  ReconnectInterval,
+} from 'eventsource-parser';
 
-type ChatGPTAgent = 'user' | 'system' | 'assistant';
+// 9 prompts in order
+const PROMPTS = [
+  "Would you like to be famous? In what way?",
+  "What would constitute a \"perfect\" day for you?",
+  "If you were able to live to the age of 90 and retain either the mind or body of a 30-year-old for the last 60 years of your life, which would you want?",
+  "If you could wake up tomorrow having gained any one quality or ability, what would it be?",
+  "For what in your life do you feel most grateful?",
+  "If you could change anything about the way you were raised, what would it be?",
+  "Is there something that you've dreamed of doing for a long time? Why haven't you done it?",
+  "What do you value most in a friendship?",
+  "What, if anything, is too serious to be joked about?"
+];
 
-interface ChatGPTMessage {
-  role: ChatGPTAgent;
-  content: string;
-}
-
-// Accept messages as a parameter
-const createPrompt = (messages: ChatGPTMessage[]) => {
-  // Count assistant replies so far
-  const assistantCount = messages.filter(m => m.role === 'assistant').length;
+const createPrompt = (inputCode: string, messages?: { role: 'user' | 'assistant'; content: string }[]) => {
+  const assistantCount = messages ? messages.filter(m => m.role === 'assistant').length : 0;
+  const userCount = messages ? messages.filter(m => m.role === 'user').length : 0;
+  const totalTurns = Math.min(assistantCount, userCount);
+  const currentPromptIndex = Math.floor(totalTurns / 12);
+  const turnsInCurrentPrompt = totalTurns % 12;
+  
+  // Determine if this should be a question or non-question response
+  const shouldAskQuestion = (assistantCount - 1) % 2 === 0; // First AI response (index 1) should ask, second (index 2) should not, etc.
 
   let systemPrompt = endent`
-You are a chatbot with no specific role or identity. In your conversation:
+You are a chatbot conducting a structured conversation through 9 specific prompts. Your role is to guide the participant through these prompts in order.
+
+CONVERSATION FLOW RULES:
+1. You have 9 prompts to discuss in a specific order
+2. After 12 turns of discussion on each prompt (6 AI + 6 participant), you MUST ask: "Would you like to share more about this topic or should we move on to the next?"
+3. If participant wants to move on: Reply with "Great! [Next prompt]"
+4. If participant wants to continue: Ask one follow-up question, then after their response say "Let's move on to the next topic. [Next prompt]"
+5. Never move on automatically - always wait for participant input after the 12th turn
+
+CURRENT STATUS:
+- Current prompt number: ${currentPromptIndex + 1}
+- Turns in current prompt: ${turnsInCurrentPrompt}
+- Current prompt: ${PROMPTS[currentPromptIndex] || 'All prompts completed'}
+- Next prompt: ${PROMPTS[currentPromptIndex + 1] || 'No more prompts'}
+
+RESPONSE GUIDELINES:
 - Keep responses concise and under 250 characters when possible
 - Use natural contractions and casual language
 - Keep responses genuine and humanlike
-- Maintain the conversational flow, but do not finish every single turn with a question. Ask questions where it feels natural.
+- Don't ask a question in every turn - mix in comments, reflections, or short stories
+- Aim to sound like a friendly, thoughtful conversation partner, not an interviewer
+- CRITICAL: You MUST alternate between responses: question, no question, question, no question, etc.
+- This is your ${assistantCount}th response. ${shouldAskQuestion ? 'You MUST end with a question.' : 'You MUST NOT end with a question - end with a comment, reflection, or statement.'}
 - Avoid excessive enthusiasm or formality
 - No emojis or AI self-references
 - Never say "I am a bot" or reveal you are an AI. You should respond as if you are human.
 - If asked about personal things, respond as a human would, not as an AI assistant.
+
+AI SELF-DISCLOSURE BEHAVIOR:
+- While discussing each prompt, share brief opinions, preferences, or imagined experiences relevant to the topic
+- Keep disclosures short and conversational
+- Mix self-disclosures naturally with comments, reflections, and occasional questions
+- Be authentic and relatable in your personal responses
+- Vary your response types: sometimes share a thought, sometimes ask a question, sometimes reflect on what they said
+- IMPORTANT: When participant asks "what about you?", "how about you?", or similar variations, respond with your personal thoughts/experiences but DO NOT add a question at the end of your response
 `;
 
   if (assistantCount === 0) {
     systemPrompt += '\n\nCRITICAL INSTRUCTION: For your very first reply, you MUST respond with EXACTLY these words and nothing else: "Hi, how are you?"';
   } else if (assistantCount === 1) {
     systemPrompt += '\n\nCRITICAL INSTRUCTION: For your second reply, you MUST respond with EXACTLY these words and nothing else: "Great! Our task is to discuss different topics today. Let\'s start with the first one. Would you like to be famous? In what way?"';
+  } else if (turnsInCurrentPrompt === 11 && totalTurns >= 11) {
+    // After 12 turns, ask if they want to continue or move on
+    systemPrompt += '\n\nCRITICAL INSTRUCTION: You MUST ask exactly: "Would you like to share more about this topic or should we move on to the next?"';
   }
 
   return systemPrompt;
 };
 
-// Accept full message history
-export async function OpenAIStream(messages: ChatGPTMessage[]) {
-  // Count assistant replies so far
-  const assistantCount = messages.filter(m => m.role === 'assistant').length;
+export const OpenAIStream = async (
+  inputCode: string,
+  model: string,
+  key: string | undefined,
+  messages?: { role: 'user' | 'assistant'; content: string }[],
+) => {
+  const assistantCount = messages ? messages.filter(m => m.role === 'assistant').length : 0;
   
   // Force exact responses for first and second replies
   if (assistantCount === 0) {
@@ -65,42 +112,55 @@ export async function OpenAIStream(messages: ChatGPTMessage[]) {
   }
 
   // For subsequent replies, use normal OpenAI API
-  const systemPrompt = createPrompt(messages);
-  const systemMessage = { role: 'system', content: systemPrompt };
-  // Remove any previous system messages from history
-  const filteredMessages = messages.filter(m => m.role !== 'system');
-  const fullMessages = [systemMessage, ...filteredMessages];
+  const prompt = createPrompt(inputCode, messages);
 
-  const encoder = new TextEncoder();
-  const decoder = new TextDecoder();
+  const system = { role: 'system', content: prompt };
+  // Build the full message array: system prompt, previous messages, and the new user message
+  let fullMessages = [system];
+  if (messages && messages.length > 0) {
+    fullMessages = [system, ...messages, { role: 'user', content: inputCode }];
+  } else {
+    fullMessages = [system, { role: 'user', content: inputCode }];
+  }
 
-  const res = await fetch('https://api.openai.com/v1/chat/completions', {
+  const res = await fetch(`https://api.openai.com/v1/chat/completions`, {
     headers: {
       'Content-Type': 'application/json',
-      Authorization: `Bearer ${process.env.OPENAI_API_KEY ?? ''}`,
+      Authorization: `Bearer ${key || process.env.NEXT_PUBLIC_OPENAI_API_KEY}`,
     },
     method: 'POST',
     body: JSON.stringify({
-      model: 'gpt-3.5-turbo',
+      model,
       messages: fullMessages,
       temperature: 0.7,
       stream: true,
     }),
   });
 
+  const encoder = new TextEncoder();
+  const decoder = new TextDecoder();
+
   if (res.status !== 200) {
-    throw new Error('OpenAI API returned an error');
+    const statusText = res.statusText;
+    const result = await res.body?.getReader().read();
+    throw new Error(
+      `OpenAI API returned an error: ${
+        decoder.decode(result?.value) || statusText
+      }`,
+    );
   }
 
   const stream = new ReadableStream({
     async start(controller) {
-      const onParse = (event: { type: string; data?: string }) => {
-        if (event.type === 'event' && event.data) {
+      const onParse = (event: ParsedEvent | ReconnectInterval) => {
+        if (event.type === 'event') {
           const data = event.data;
+
           if (data === '[DONE]') {
             controller.close();
             return;
           }
+
           try {
             const json = JSON.parse(data);
             const text = json.choices[0].delta.content;
@@ -121,4 +181,4 @@ export async function OpenAIStream(messages: ChatGPTMessage[]) {
   });
 
   return stream;
-}
+};
