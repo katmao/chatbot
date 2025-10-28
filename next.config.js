@@ -1,10 +1,15 @@
 /** @type {import('next').NextConfig} */
 
+const basePath = process.env.NEXT_PUBLIC_BASE_PATH;
+
 const nextConfig = {
   reactStrictMode: false,
-  basePath: process.env.NEXT_PUBLIC_BASE_PATH,
-  assetPrefix: process.env.NEXT_PUBLIC_BASE_PATH,
-  reactStrictMode: false, // changed this to false
+  ...(basePath
+    ? {
+        basePath,
+        assetPrefix: basePath,
+      }
+    : {}),
   images: {
     domains: [
       'images.unsplash.com',
