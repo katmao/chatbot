@@ -24,31 +24,34 @@ const FIRST_PROMPT_INTRO =
 const MOVE_ON_QUESTION =
   'Would you like to share more about this topic or should we move on to the next?';
 
-const MOVE_ON_PATTERNS = [
-  'move on',
-  'next topic',
-  'next prompt',
-  'next question',
-  'next one',
-  'go to the next',
-  'proceed to the next',
-  "let's move on",
-  'take the next topic',
+const MOVE_ON_PATTERNS: RegExp[] = [
+  /\bmove\s+on\b/i,
+  /\bnext\s+(topic|prompt|question|one)\b/i,
+  /\bnext\b[^\w]*(please|thanks?)/i,
+  /\blet'?s\s+(do|go|take|switch|move)\s+(?:to\s+)?(?:the\s+)?next\b/i,
+  /\bgo\s+(?:to\s+)?(?:the\s+)?next\b/i,
+  /\bproceed\s+(?:to\s+)?(?:the\s+)?next\b/i,
+  /\bswitch\s+(?:to\s+)?(?:the\s+)?next\b/i,
+  /\bwe\s+can\s+(move|go|switch)\s+(?:to\s+)?(?:the\s+)?next\b/i,
+  /\badvance\s+(?:to\s+)?(?:the\s+)?next\b/i,
+  /\bnext\b\s*$/i,
 ];
 
-const CONTINUE_PATTERNS = [
-  'continue',
-  'keep going',
-  'keep talking',
-  "let's keep going",
-  'stay on this',
-  'stay here',
-  "don't move on",
-  "don't switch yet",
-  "let's talk more",
-  'tell me more',
-  'share more',
+const CONTINUE_PATTERNS: RegExp[] = [
+  /\bcontinue\b/i,
+  /\bkeep\s+(going|talking)\b/i,
+  /\blet'?s\s+keep\s+(going|talking)\b/i,
+  /\bstay\s+(on|here|with)\b/i,
+  /\b(?:don'?t|do not)\s+(move|switch)\s+on\b/i,
+  /\b(?:don'?t|do not)\s+switch\b/i,
+  /\blet'?s\s+talk\s+more\b/i,
+  /\btell\s+me\s+more\b/i,
+  /\bshare\s+more\b/i,
+  /\bkeep\s+discussing\b/i,
 ];
+
+const matchesPattern = (text: string, patterns: RegExp[]) =>
+  patterns.some(pattern => pattern.test(text));
 
 const normalizeWhitespace = (text: string) => text.replace(/\s+/g, ' ').trim();
 
@@ -130,11 +133,11 @@ const getPromptProgress = (messages: ChatMessage[] = []) => {
       } else {
         userSinceIntro += 1;
         if (moveOnQuestionIndex !== -1 && i > moveOnQuestionIndex) {
-          const normalizedUser = normalizeWhitespace(msg.content).toLowerCase();
-          if (MOVE_ON_PATTERNS.some(pattern => normalizedUser.includes(pattern))) {
+          const normalizedUser = normalizeWhitespace(msg.content);
+          if (matchesPattern(normalizedUser, MOVE_ON_PATTERNS)) {
             userRequestedMoveOn = true;
           }
-          if (CONTINUE_PATTERNS.some(pattern => normalizedUser.includes(pattern))) {
+          if (matchesPattern(normalizedUser, CONTINUE_PATTERNS)) {
             userRequestedStay = true;
             if (userStayIndex === -1) {
               userStayIndex = i;
@@ -166,7 +169,10 @@ const getPromptProgress = (messages: ChatMessage[] = []) => {
   };
 };
 
-const createPrompt = (inputCode: string, messages: ChatMessage[] = []) => {
+const createPrompt = (
+  inputCode: string,
+  messages: ChatMessage[] = [],
+) => {
   const assistantCount = messages.filter(m => m.role === 'assistant').length;
   const {
     currentPromptIndex,
@@ -290,7 +296,14 @@ AI SELF-DISCLOSURE BEHAVIOR:
     }
   }
 
-  return systemPrompt;
+  let forcedResponse: string | null = null;
+  if (mustForceTransition) {
+    forcedResponse = moveOnReply;
+  } else if (shouldDeliverPostFollowUpTransition) {
+    forcedResponse = finalTransitionReply;
+  }
+
+  return { systemPrompt, forcedResponse };
 };
 
 export const OpenAIStream = async (
@@ -326,10 +339,21 @@ export const OpenAIStream = async (
     return stream;
   }
 
-  // For subsequent replies, use normal OpenAI API
-  const prompt = createPrompt(inputCode, messages ?? []);
+  // For subsequent replies, use normal OpenAI API unless a forced response is required
+  const { systemPrompt, forcedResponse } = createPrompt(inputCode, messages ?? []);
 
-  const system = { role: 'system', content: prompt };
+  if (forcedResponse) {
+    const encoder = new TextEncoder();
+    const stream = new ReadableStream({
+      start(controller) {
+        controller.enqueue(encoder.encode(forcedResponse));
+        controller.close();
+      },
+    });
+    return stream;
+  }
+
+  const system = { role: 'system', content: systemPrompt };
   // Build the full message array: system prompt, previous messages, and the new user message
   let fullMessages = [system];
   if (messages && messages.length > 0) {
