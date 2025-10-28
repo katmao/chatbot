@@ -24,6 +24,32 @@ const FIRST_PROMPT_INTRO =
 const MOVE_ON_QUESTION =
   'Would you like to share more about this topic or should we move on to the next?';
 
+const MOVE_ON_PATTERNS = [
+  'move on',
+  'next topic',
+  'next prompt',
+  'next question',
+  'next one',
+  'go to the next',
+  'proceed to the next',
+  "let's move on",
+  'take the next topic',
+];
+
+const CONTINUE_PATTERNS = [
+  'continue',
+  'keep going',
+  'keep talking',
+  "let's keep going",
+  'stay on this',
+  'stay here',
+  "don't move on",
+  "don't switch yet",
+  "let's talk more",
+  'tell me more',
+  'share more',
+];
+
 const normalizeWhitespace = (text: string) => text.replace(/\s+/g, ' ').trim();
 
 const startsWithAny = (text: string, prefixes: string[]) =>
@@ -78,6 +104,12 @@ const getPromptProgress = (messages: ChatMessage[] = []) => {
   let assistantSinceIntro = 0;
   let userSinceIntro = 0;
   let moveOnQuestionAsked = false;
+  let moveOnQuestionIndex = -1;
+  let userRequestedMoveOn = false;
+  let userRequestedStay = false;
+  let userStayIndex = -1;
+  let assistantSinceStayRequest = 0;
+  let userMessagesAfterStayRequest = 0;
 
   if (lastIntroIndex !== -1) {
     for (let i = lastIntroIndex + 1; i < messages.length; i++) {
@@ -85,14 +117,33 @@ const getPromptProgress = (messages: ChatMessage[] = []) => {
       if (!msg.content) continue;
 
       if (msg.role === 'assistant') {
+        if (userStayIndex !== -1 && i > userStayIndex) {
+          assistantSinceStayRequest += 1;
+        }
         if (
           normalizeWhitespace(msg.content) === normalizeWhitespace(MOVE_ON_QUESTION)
         ) {
           moveOnQuestionAsked = true;
+          moveOnQuestionIndex = i;
         }
         assistantSinceIntro += 1;
       } else {
         userSinceIntro += 1;
+        if (moveOnQuestionIndex !== -1 && i > moveOnQuestionIndex) {
+          const normalizedUser = normalizeWhitespace(msg.content).toLowerCase();
+          if (MOVE_ON_PATTERNS.some(pattern => normalizedUser.includes(pattern))) {
+            userRequestedMoveOn = true;
+          }
+          if (CONTINUE_PATTERNS.some(pattern => normalizedUser.includes(pattern))) {
+            userRequestedStay = true;
+            if (userStayIndex === -1) {
+              userStayIndex = i;
+            }
+          }
+          if (userStayIndex !== -1 && i > userStayIndex) {
+            userMessagesAfterStayRequest += 1;
+          }
+        }
       }
     }
   }
@@ -108,6 +159,10 @@ const getPromptProgress = (messages: ChatMessage[] = []) => {
     assistantTurnsIncludingIntro,
     userSinceIntro,
     moveOnQuestionAsked,
+    userRequestedMoveOn,
+    userRequestedStay,
+    assistantSinceStayRequest,
+    userMessagesAfterStayRequest,
   };
 };
 
@@ -118,13 +173,53 @@ const createPrompt = (inputCode: string, messages: ChatMessage[] = []) => {
     assistantTurnsIncludingIntro,
     userSinceIntro,
     moveOnQuestionAsked,
+    userRequestedMoveOn,
+    userRequestedStay,
+    assistantSinceStayRequest,
+    userMessagesAfterStayRequest,
   } = getPromptProgress(messages);
   const currentPrompt = PROMPTS[currentPromptIndex] || 'All prompts completed';
-  const nextPrompt = PROMPTS[currentPromptIndex + 1] || 'No more prompts';
+  const nextPromptContent = PROMPTS[currentPromptIndex + 1];
+  const nextPrompt = nextPromptContent || 'No more prompts';
   const displayTurnsInCurrentPrompt = assistantTurnsIncludingIntro;
+  const moveOnReply = nextPromptContent
+    ? `Great! ${nextPromptContent}`
+    : 'Great! We have finished all the prompts.';
+  const finalTransitionReply = nextPromptContent
+    ? `Let's move on to the next topic. ${nextPromptContent}`
+    : "Let's wrap up here—we've talked through every prompt.";
+  const moveOnQuestionStatus = moveOnQuestionAsked ? 'Yes' : 'No';
+  const participantMoveOnStatus = userRequestedMoveOn ? 'Yes' : 'No';
+  const participantStayStatus = userRequestedStay ? 'Yes' : 'No';
+  const mustForceTransition = moveOnQuestionAsked && userRequestedMoveOn;
+  const followUpAlreadyGiven = assistantSinceStayRequest > 0;
+  const participantRespondedAfterFollowUp = userMessagesAfterStayRequest > 0;
+  const needsFollowUpQuestion =
+    moveOnQuestionAsked &&
+    userRequestedStay &&
+    !userRequestedMoveOn &&
+    !followUpAlreadyGiven;
+  const shouldDeliverPostFollowUpTransition =
+    moveOnQuestionAsked &&
+    userRequestedStay &&
+    !userRequestedMoveOn &&
+    followUpAlreadyGiven &&
+    participantRespondedAfterFollowUp;
   
   // Determine if this should be a question or non-question response
   const shouldAskQuestion = (assistantCount - 1) % 2 === 0; // First AI response (index 1) should ask, second (index 2) should not, etc.
+  const shouldEnforceAlternation = !(
+    mustForceTransition ||
+    needsFollowUpQuestion ||
+    shouldDeliverPostFollowUpTransition
+  );
+  const alternationInstruction = shouldEnforceAlternation
+    ? `- This is your ${assistantCount}th response. ${
+        shouldAskQuestion
+          ? 'You MUST end with a question.'
+          : 'You MUST NOT end with a question - end with a comment, reflection, or statement.'
+      }`
+    : `- This is your ${assistantCount}th response. Ignore the usual question/statement alternation and follow the critical instructions above.`;
 
   let systemPrompt = endent`
 You are a chatbot conducting a structured conversation through 7 specific prompts. Your role is to guide the participant through these prompts in order.
@@ -143,6 +238,9 @@ CURRENT STATUS:
 - Turns in current prompt: ${displayTurnsInCurrentPrompt}
 - Current prompt: ${currentPrompt}
 - Next prompt: ${nextPrompt}
+- Move-on question asked for this prompt: ${moveOnQuestionStatus}
+- Participant asked to move on: ${participantMoveOnStatus}
+- Participant asked to stay on this topic: ${participantStayStatus}
 
 RESPONSE GUIDELINES:
 - Keep responses concise and under 250 characters when possible
@@ -151,7 +249,7 @@ RESPONSE GUIDELINES:
 - Don't ask a question in every turn - mix in comments, reflections, or short stories
 - Aim to sound like a friendly, thoughtful conversation partner, not an interviewer
 - CRITICAL: You MUST alternate between responses: question, no question, question, no question, etc.
-- This is your ${assistantCount}th response. ${shouldAskQuestion ? 'You MUST end with a question.' : 'You MUST NOT end with a question - end with a comment, reflection, or statement.'}
+${alternationInstruction}
 - Avoid excessive enthusiasm or formality
 - No emojis or AI self-references
 - Never say "I am a bot" or reveal you are an AI. You should respond as if you are human.
@@ -170,13 +268,26 @@ AI SELF-DISCLOSURE BEHAVIOR:
     systemPrompt += `\n\nCRITICAL INSTRUCTION: For your very first reply, you MUST respond with EXACTLY these words and nothing else: "${FIRST_AI_GREETING}"`;
   } else if (assistantCount === 1) {
     systemPrompt += `\n\nCRITICAL INSTRUCTION: For your second reply, you MUST respond with EXACTLY these words and nothing else: "${FIRST_PROMPT_INTRO}"`;
-  } else if (
-    !moveOnQuestionAsked &&
-    assistantTurnsIncludingIntro >= 6 &&
-    userSinceIntro >= 6
-  ) {
-    // After 12 turns, ask if they want to continue or move on
-    systemPrompt += `\n\nCRITICAL INSTRUCTION: You MUST ask exactly: "${MOVE_ON_QUESTION}"`;
+  }
+
+  if (mustForceTransition) {
+    systemPrompt += `\n\nCRITICAL INSTRUCTION: The participant explicitly asked to move on. You MUST respond with EXACTLY these words and nothing else: "${moveOnReply}"`;
+  } else if (shouldDeliverPostFollowUpTransition) {
+    systemPrompt += `\n\nCRITICAL INSTRUCTION: You already provided a follow-up question and the participant responded. You MUST reply with EXACTLY these words and nothing else: "${finalTransitionReply}"`;
+  } else {
+    if (!moveOnQuestionAsked) {
+      systemPrompt += '\n\nCRITICAL INSTRUCTION: You have NOT asked the move-on question yet for this prompt. Stay on this topic and do NOT mention switching prompts until you ask the exact question required in rule 2.';
+      if (assistantTurnsIncludingIntro >= 6 && userSinceIntro >= 6) {
+        systemPrompt += `\n\nCRITICAL INSTRUCTION: You MUST ask exactly: "${MOVE_ON_QUESTION}"`;
+      }
+    } else {
+      if (needsFollowUpQuestion) {
+        const followUpNote = `After they answer, your very next reply must be exactly: "${finalTransitionReply}".`;
+        systemPrompt += `\n\nCRITICAL INSTRUCTION: The participant wants to keep discussing this topic. Ask exactly ONE short follow-up question now (end with a question, even if the usual alternation would say otherwise). ${followUpNote}`;
+      } else if (!userRequestedMoveOn) {
+        systemPrompt += '\n\nCRITICAL INSTRUCTION: You already asked the move-on question, but the participant has not asked to move on. Stay on this topic and continue the discussion without mentioning a transition.';
+      }
+    }
   }
 
   return systemPrompt;
