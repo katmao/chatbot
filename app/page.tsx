@@ -91,9 +91,20 @@ export default function Home() {
           
           // Save voice interaction to Firebase
           try {
-            const sessionId = `session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+            // Persist a stable session id across page usage
+            let sessionId = localStorage.getItem('voice_session_id');
+            if (!sessionId) {
+              sessionId = `session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+              localStorage.setItem('voice_session_id', sessionId);
+              // reset turn counter for a new session
+              localStorage.setItem('voice_turn_counter', '0');
+            }
+            // Track a per-session turn counter
+            const previousTurnCount = parseInt(localStorage.getItem('voice_turn_counter') || '0', 10);
+            const currentTurn = previousTurnCount + 1;
+            localStorage.setItem('voice_turn_counter', String(currentTurn));
             const prolificPid = new URLSearchParams(window.location.search).get('PROLIFIC_PID') || 'unknown_pid';
-            const turnNumber = Math.floor((updatedMessages.length + 1) / 2);
+            const turnNumber = currentTurn;
             
             await logVoiceInteraction({
               userMessage: text,
