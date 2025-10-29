@@ -155,6 +155,7 @@ export default function Home() {
           <MessageBox
             key={message.timestamp}
             output={message.content}
+            variant="bubble"
             isUser={true}
             bg="#e5e7eb"
           />
