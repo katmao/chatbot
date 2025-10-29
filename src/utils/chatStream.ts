@@ -1,10 +1,4 @@
 import endent from 'endent';
-import {
-  createParser,
-  ParsedEvent,
-  ReconnectInterval,
-} from 'eventsource-parser';
-
 type ChatMessage = { role: 'user' | 'assistant'; content: string };
 
 // 7 prompts in order
@@ -391,7 +385,9 @@ export const OpenAIStream = async (
 
   const stream = new ReadableStream({
     async start(controller) {
-      const onParse = (event: ParsedEvent | ReconnectInterval) => {
+      const { createParser } = await loadEventSourceParser();
+
+      const onParse = (event: ParsedEvent | ReconnectIntervalEvent) => {
         if (event.type === 'event') {
           const data = event.data;
 
@@ -408,6 +404,8 @@ export const OpenAIStream = async (
           } catch (e) {
             controller.error(e);
           }
+        } else if (event.type === 'reconnect-interval') {
+          // No-op: reconnect hints are ignored in this client
         }
       };
 
@@ -420,4 +418,31 @@ export const OpenAIStream = async (
   });
 
   return stream;
+};
+type EventSourceParserModule = {
+  createParser: (
+    onParse: (event: ParsedEvent | ReconnectIntervalEvent) => void,
+  ) => {
+    feed: (chunk: string) => void;
+  };
+};
+
+type ParsedEvent = {
+  type: 'event';
+  data: string;
+};
+
+type ReconnectIntervalEvent = {
+  type: 'reconnect-interval';
+  value: number;
+};
+
+let eventSourceParserModulePromise: Promise<EventSourceParserModule> | null =
+  null;
+
+const loadEventSourceParser = () => {
+  if (!eventSourceParserModulePromise) {
+    eventSourceParserModulePromise = import('eventsource-parser');
+  }
+  return eventSourceParserModulePromise;
 };
