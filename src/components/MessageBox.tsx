@@ -1,5 +1,4 @@
-import ReactMarkdown from 'react-markdown'
-import { useColorModeValue } from '@chakra-ui/react'
+import { Box, useColorModeValue } from '@chakra-ui/react'
 import Card from '@/components/card/Card'
 
 type MessageBoxProps = {
@@ -36,9 +35,13 @@ export default function MessageBox({
       borderRadius={isPanel ? undefined : 'lg'}
       mb={isPanel ? undefined : '12px'}
     >
-      <ReactMarkdown className={isPanel ? 'font-medium' : undefined}>
+      <Box
+        width="100%"
+        whiteSpace="pre-wrap"
+        className={isPanel ? 'font-medium' : undefined}
+      >
         {output || ''}
-      </ReactMarkdown>
+      </Box>
     </Card>
   )
 }
