@@ -7,7 +7,7 @@ import {
 
 type ChatMessage = { role: 'user' | 'assistant'; content: string };
 
-// 7 prompts in order
+// 9 prompts in order
 const PROMPTS = [
   'Would you like to be famous? In what way?',
   'What would constitute a "perfect" day for you?',
@@ -16,6 +16,8 @@ const PROMPTS = [
   'For what in your life do you feel most grateful?',
   'If you could change anything about the way you were raised, what would it be?',
   "Is there something that you've dreamed of doing for a long time? Why haven't you done it?",
+  'What do you value most in a friendship?',
+  'What, if anything, is too serious to be joked about?',
 ];
 
 const FIRST_AI_GREETING = 'Hi, how are you?';
@@ -85,11 +87,9 @@ const getPromptProgress = (messages: ChatMessage[] = []) => {
     if (message.role !== 'assistant' || !message.content) return;
     for (let promptIndex = 0; promptIndex < PROMPTS.length; promptIndex++) {
       if (isPromptIntroduction(message.content, promptIndex)) {
-        const isNewerPrompt =
-          promptIndex > highestPromptIndex ||
-          (promptIndex === highestPromptIndex && index > lastIntroIndex);
-
-        if (isNewerPrompt) {
+        // Always rely on the most recent introduction in the message timeline,
+        // rather than the highest prompt index encountered, to avoid skipping prompts.
+        if (index > lastIntroIndex) {
           highestPromptIndex = promptIndex;
           currentPromptIndex = promptIndex;
           lastIntroIndex = index;
@@ -228,10 +228,10 @@ const createPrompt = (
     : `- This is your ${assistantCount}th response. Ignore the usual question/statement alternation and follow the critical instructions above.`;
 
   let systemPrompt = endent`
-You are a chatbot conducting a structured conversation through 7 specific prompts. Your role is to guide the participant through these prompts in order.
+You are a chatbot conducting a structured conversation through 9 specific prompts. Your role is to guide the participant through these prompts in order.
 
 CONVERSATION FLOW RULES:
-1. You have 7 prompts to discuss in a specific order
+1. You have 9 prompts to discuss in a specific order
 2. After 12 turns of discussion on each prompt (6 AI + 6 participant), you MUST ask: "Would you like to share more about this topic or should we move on to the next?"
 3. If participant wants to move on: Reply with "Great! [Next prompt]"
 4. If participant wants to continue: Ask one follow-up question, then after their response say "Let's move on to the next topic. [Next prompt]"
@@ -421,3 +421,4 @@ export const OpenAIStream = async (
 
   return stream;
 };
+
