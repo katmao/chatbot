@@ -42,6 +42,7 @@ export default function Home() {
   const toast = useToast();
   const [input, setInput] = useState('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
 
   // Auto-scroll to bottom when messages change
   const scrollToBottom = () => {
@@ -51,6 +52,18 @@ export default function Home() {
   useEffect(() => {
     scrollToBottom();
   }, [messages]);
+
+  // Auto-focus the input when the agent finishes speaking (user's turn)
+  useEffect(() => {
+    if (!isSpeaking) {
+      const t = setTimeout(() => {
+        if (inputRef.current && !inputRef.current.disabled) {
+          inputRef.current.focus();
+        }
+      }, 150);
+      return () => clearTimeout(t);
+    }
+  }, [isSpeaking]);
 
   const handleUserInput = useCallback(async (text: string) => {
     // Add the new user message to the local state
@@ -190,7 +203,7 @@ export default function Home() {
       
       <Box as="form" onSubmit={(e: React.FormEvent) => {
         e.preventDefault();
-        if (input.trim()) {
+        if (!isSpeaking && input.trim()) {
           handleUserInput(input.trim());
           setInput('');
         }
@@ -212,7 +225,7 @@ export default function Home() {
             onKeyDown={e => {
               if (e.key === 'Enter' && !e.shiftKey) {
                 e.preventDefault();
-                if (input.trim()) {
+                if (!isSpeaking && input.trim()) {
                   handleUserInput(input.trim());
                   setInput('');
                 }
@@ -222,7 +235,9 @@ export default function Home() {
             border="1px solid #d1d5db"
             borderRadius="md"
             _focus={{ boxShadow: 'none', border: '1.5px solid #a3a3a3', bg: '#e5e7eb' }}
-            autoFocus
+            ref={inputRef}
+            disabled={isSpeaking}
+            opacity={isSpeaking ? 0.6 : 1}
           />
           <Button
             type="submit"
@@ -230,7 +245,7 @@ export default function Home() {
             color="#222"
             _hover={{ bg: '#e5e7eb' }}
             borderRadius="md"
-            isDisabled={!input.trim()}
+            isDisabled={!input.trim() || isSpeaking}
           >
             Send
           </Button>
