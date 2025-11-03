@@ -54,6 +54,8 @@ export default function Chat() {
   const [loading, setLoading] = useState<boolean>(false);
   // Reference to the messages container
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  // Reference to the input field for auto-focusing
+  const inputRef = useRef<HTMLInputElement>(null);
   const toast = useToast();
   const lastMilestoneRef = useRef(0);
   // Session ID for tracking conversations
@@ -89,6 +91,21 @@ export default function Chat() {
     scrollToBottom();
   }, [messages, outputCode]);
 
+  // Auto-focus input when AI finishes responding or on initial load
+  useEffect(() => {
+    const isAITyping = messages.some(msg => msg.isTyping);
+    // Focus input when not loading and AI is not typing (user's turn)
+    if (!loading && !isAITyping) {
+      // Small delay to ensure DOM is ready and input is enabled
+      const timeoutId = setTimeout(() => {
+        if (inputRef.current && !inputRef.current.disabled) {
+          inputRef.current.focus();
+        }
+      }, 150);
+      return () => clearTimeout(timeoutId);
+    }
+  }, [loading, messages]);
+
   // Notification system removed - AI now handles prompt transitions automatically
 
   // API Key
@@ -113,6 +130,11 @@ export default function Chat() {
     { color: 'whiteAlpha.600' },
   );
   const handleTranslate = async () => {
+    // Prevent submission while loading or while AI is typing
+    if (loading || messages.some(msg => msg.isTyping)) {
+      return;
+    }
+
     // Chat post conditions(maximum number of characters, valid message etc.)
     const maxCodeLength = model === 'gpt-4o' ? 700 : 700;
 
@@ -276,7 +298,10 @@ export default function Chat() {
   const handleKeyPress = (event: React.KeyboardEvent<HTMLInputElement>) => {
     if (event.key === 'Enter' && !event.shiftKey) {
       event.preventDefault();
-      handleTranslate();
+      // Prevent submission while loading or while AI is typing
+      if (!loading && !messages.some(msg => msg.isTyping)) {
+        handleTranslate();
+      }
     }
   };
 
@@ -357,11 +382,13 @@ export default function Chat() {
         <Box w={{ base: '100%', sm: '90%', md: '600px' }}>
           <Flex as="form" onSubmit={e => { 
             e.preventDefault(); 
-            if (inputCode.trim()) {
+            // Prevent submission while loading or while AI is typing
+            if (inputCode.trim() && !loading && !messages.some(msg => msg.isTyping)) {
               handleTranslate(); 
             }
           }}>
           <Input
+              ref={inputRef}
               value={inputCode}
               onChange={e => setInputCode(e.target.value)}
               onKeyDown={handleKeyPress}
@@ -373,8 +400,9 @@ export default function Chat() {
               color="#222"
               _placeholder={{ color: '#A0AEC0' }}
               mr={2}
-              autoFocus
               _focus={{ boxShadow: 'none', borderColor: '#E5E7EB' }}
+              disabled={loading || messages.some(msg => msg.isTyping)}
+              opacity={loading || messages.some(msg => msg.isTyping) ? 0.6 : 1}
           />
           <Button
               type="submit"
@@ -382,7 +410,7 @@ export default function Chat() {
               borderRadius="8px"
               px={6}
               isLoading={loading}
-              disabled={loading || !inputCode.trim()}
+              disabled={loading || !inputCode.trim() || messages.some(msg => msg.isTyping)}
               bg="#E5E7EB"
               color="#222"
               _hover={{ bg: '#D1D5DB' }}
