@@ -22,7 +22,7 @@ const firebaseConfig = {
 const targetDateArg = process.argv[2];
 
 if (!targetDateArg) {
-  console.error('Usage: node scripts/export-voice-interactions-by-date.js <YYYY-MM-DD>');
+  console.error('Usage: node scripts/export-chat-interactions-by-date.js <YYYY-MM-DD>');
   process.exit(1);
 }
 
@@ -61,12 +61,12 @@ function formatTimestampInET(timestamp) {
   return `${lookup.year}-${lookup.month}-${lookup.day} ${lookup.hour}:${lookup.minute}:${lookup.second} ${lookup.timeZoneName || 'ET'}`;
 }
 
-async function exportVoiceInteractionsForDate() {
+async function exportChatInteractionsForDate() {
   try {
-    console.log(`Fetching voice interactions for ${targetDateArg}...`);
+    console.log(`Fetching chat interactions for ${targetDateArg}...`);
 
     const q = query(
-      collection(db, 'voice_interactions'),
+      collection(db, 'chat_interactions'),
       where('timestamp', '>=', Timestamp.fromDate(startOfDay)),
       where('timestamp', '<', Timestamp.fromDate(endOfDay)),
       orderBy('timestamp', 'asc'),
@@ -75,7 +75,7 @@ async function exportVoiceInteractionsForDate() {
     const snapshot = await getDocs(q);
 
     if (snapshot.empty) {
-      console.log('No voice interactions found for that date.');
+      console.log('No chat interactions found for that date.');
       return;
     }
 
@@ -89,7 +89,6 @@ async function exportVoiceInteractionsForDate() {
         turnNumber: data.turnNumber ?? '',
         sessionId: data.sessionId || '',
         prolificPid: data.prolificPid || '',
-        interactionType: data.interactionType || 'voice',
       });
     });
 
@@ -99,23 +98,23 @@ async function exportVoiceInteractionsForDate() {
       return a.timestamp.toMillis() - b.timestamp.toMillis();
     });
 
-    const csvHeader = 'Timestamp,User Message,Assistant Message,Turn Number,Session ID,Prolific PID,Interaction Type\n';
+    const csvHeader = 'Timestamp,User Message,Assistant Message,Turn Number,Session ID,Prolific PID\n';
     const csvRows = rows.map(row => {
       const ts = formatTimestampInET(row.timestamp);
       const user = String(row.userMessage).replace(/"/g, '""');
       const assistant = String(row.assistantMessage).replace(/"/g, '""');
-      return `${ts},"${user}","${assistant}",${row.turnNumber},${row.sessionId},${row.prolificPid},${row.interactionType}`;
+      return `${ts},"${user}","${assistant}",${row.turnNumber},${row.sessionId},${row.prolificPid}`;
     });
 
     const csvContent = csvHeader + csvRows.join('\n');
-    const filename = `voice_interactions_${targetDateArg}.csv`;
+    const filename = `chat_interactions_${targetDateArg}.csv`;
     fs.writeFileSync(filename, csvContent);
 
     console.log(`Export complete. Wrote ${csvRows.length} rows to ${filename}`);
   } catch (error) {
-    console.error('Failed to export voice interactions:', error);
+    console.error('Failed to export chat interactions:', error);
     process.exit(1);
   }
 }
 
-exportVoiceInteractionsForDate();
+exportChatInteractionsForDate();
