@@ -19,40 +19,55 @@ const firebaseConfig = {
   appId: '1:919496165622:web:2557bcce7f1bbfab6ec4d7',
 };
 
-const targetDateArg = process.argv[2];
+const startDateArg = process.argv[2];
+const endDateArg = process.argv[3];
 
-if (!targetDateArg) {
-  console.error('Usage: node scripts/export-chat-interactions-by-date.js <YYYY-MM-DD>');
+if (!startDateArg) {
+  console.error('Usage: node scripts/export-chat-interactions-by-date.js <START_YYYY-MM-DD> [END_YYYY-MM-DD]');
   process.exit(1);
 }
 
-const targetDate = new Date(`${targetDateArg}T00:00:00Z`);
-if (Number.isNaN(targetDate.getTime())) {
-  console.error('Invalid date. Expected format YYYY-MM-DD');
+const startDate = new Date(`${startDateArg}T00:00:00Z`);
+if (Number.isNaN(startDate.getTime())) {
+  console.error('Invalid start date. Expected format YYYY-MM-DD');
   process.exit(1);
 }
 
-const startOfDay = targetDate;
-const endOfDay = new Date(startOfDay.getTime() + 24 * 60 * 60 * 1000);
+const endDate = endDateArg ? new Date(`${endDateArg}T00:00:00Z`) : startDate;
+if (Number.isNaN(endDate.getTime())) {
+  console.error('Invalid end date. Expected format YYYY-MM-DD');
+  process.exit(1);
+}
+
+if (endDate < startDate) {
+  console.error('End date must be on or after start date.');
+  process.exit(1);
+}
+
+const startOfRange = startDate;
+const endOfRange = new Date(endDate.getTime() + 24 * 60 * 60 * 1000);
 
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 
 async function exportChatInteractionsForDate() {
   try {
-    console.log(`Fetching chat interactions for ${targetDateArg}...`);
+    const endLabel = endDateArg || startDateArg;
+    console.log(
+      `Fetching chat interactions from ${startDateArg}${endDateArg ? ` to ${endLabel}` : ''}...`,
+    );
 
     const q = query(
       collection(db, 'chat_interactions'),
-      where('timestamp', '>=', Timestamp.fromDate(startOfDay)),
-      where('timestamp', '<', Timestamp.fromDate(endOfDay)),
+      where('timestamp', '>=', Timestamp.fromDate(startOfRange)),
+      where('timestamp', '<', Timestamp.fromDate(endOfRange)),
       orderBy('timestamp', 'asc'),
     );
 
     const snapshot = await getDocs(q);
 
     if (snapshot.empty) {
-      console.log('No chat interactions found for that date.');
+      console.log('No chat interactions found for that date range.');
       return;
     }
 
@@ -70,7 +85,10 @@ async function exportChatInteractionsForDate() {
     });
 
     const csvContent = csvHeader + rows.join('\n');
-    const filename = `chat_interactions_${targetDateArg}.csv`;
+    const filename =
+      startDateArg === endLabel
+        ? `chat_interactions_${startDateArg}.csv`
+        : `chat_interactions_${startDateArg}_to_${endLabel}.csv`;
     fs.writeFileSync(filename, csvContent);
 
     console.log(`Export complete. Wrote ${rows.length} rows to ${filename}`);
